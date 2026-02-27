@@ -96,15 +96,46 @@ function parseMidFromLink(link: string): string {
 }
 
 function normalizeSmartAnswer(raw: string): string {
-  let text = raw || '';
-  text = text.replace(/<think>[\s\S]*?<\/think>/g, '');
-  text = text.replace(/```wbCustomBlock[\s\S]*?```/g, '');
+  return (raw || '').replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+}
+
+type SmartRenderBlock = {
+  kind: 'heading' | 'subheading' | 'paragraph';
+  text: string;
+  citeNums: number[];
+};
+
+function parseCiteNums(raw: string): number[] {
+  const m = /"num"\s*:\s*\[([^\]]*)\]/.exec(raw);
+  if (!m) return [];
+  const nums = m[1]
+    .split(',')
+    .map((x) => Number(String(x).trim()))
+    .filter((n) => Number.isFinite(n) && n > 0);
+  return Array.from(new Set(nums));
+}
+
+function cleanupLine(line: string): string {
+  return line
+    .replace(/^#{1,6}\s*/g, '')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/^\d+[.)、]\s*/g, '')
+    .replace(/^[•\-]\s*/g, '')
+    .replace(/[#*`_~]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function buildSmartRenderBlocks(raw: string): SmartRenderBlock[] {
+  let text = normalizeSmartAnswer(raw);
   text = text.replace(/<media-block>[\s\S]*?<\/media-block>/g, '');
+  text = text.replace(/```wbCustomBlock([\s\S]*?)```/g, (_m, payload: string) => {
+    const nums = parseCiteNums(payload || '');
+    return nums.length ? ` [[CITE:${nums.join(',')}]] ` : ' ';
+  });
+  text = text.replace(/```[\s\S]*?```/g, ' ');
   text = text.replace(/<[^>]+>/g, ' ');
-  text = text.replace(/wbCustomBlock[\s\S]*?(?=\n|$)/g, '');
-  text = text.replace(/https?:\/\/\S+/g, '');
-  text = text.replace(/`{1,3}/g, '');
-  text = text.replace(/```[\s\S]*?```/g, '');
   text = text.replace(/\\n/g, '\n');
   text = text.replace(/\r/g, '\n');
   text = text.replace(/[ \t]+/g, ' ');
@@ -114,60 +145,49 @@ function normalizeSmartAnswer(raw: string): string {
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean)
-    .filter((line) => !/(tokens truncated|emphasis-tag|data-type=|sinaweibo:\/\/|historyweibo:\/\/)/i.test(line))
-    .filter((line) => {
-      if (/[，。！？；：]/.test(line)) return true;
-      if (line.length <= 1) return false;
-      const plain = /^[\u4e00-\u9fa5A-Za-z0-9·_\-\s]+$/.test(line);
-      if (!plain) return true;
-      if (line.length > 22) return false;
-      if (/(核心|信息|进度|建议|风险|规则|结论|要点|背景|经过|项目|时间线)/.test(line)) return true;
-      return false;
-    });
+    .filter((line) => !/(tokens truncated|emphasis-tag|data-type=|sinaweibo:\/\/|historyweibo:\/\/)/i.test(line));
 
-  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
-}
+  const blocks: SmartRenderBlock[] = [];
+  const pushParagraph = (textValue: string, cites: number[]) => {
+    const cleaned = cleanupLine(textValue);
+    if (!cleaned) return;
+    if (blocks.length && blocks[blocks.length - 1].kind === 'paragraph') {
+      const prev = blocks[blocks.length - 1];
+      prev.text = `${prev.text}${prev.text.endsWith('。') || prev.text.endsWith('！') || prev.text.endsWith('？') ? '' : '。'}${cleaned}`;
+      prev.citeNums = Array.from(new Set([...prev.citeNums, ...cites]));
+      return;
+    }
+    blocks.push({ kind: 'paragraph', text: cleaned, citeNums: Array.from(new Set(cites)) });
+  };
 
-function splitSmartParagraphs(text: string): string[] {
-  const base = text
-    .split(/\n{2,}/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-  if (!base.length) return [];
+  lines.forEach((line) => {
+    const citeNums: number[] = [];
+    const citePattern = /\[\[CITE:([0-9,\s]+)\]\]/g;
+    let match: RegExpExecArray | null;
+    while ((match = citePattern.exec(line)) !== null) {
+      match[1]
+        .split(',')
+        .map((x) => Number(String(x).trim()))
+        .filter((n) => Number.isFinite(n) && n > 0)
+        .forEach((n) => citeNums.push(n));
+    }
 
-  const output: string[] = [];
-  base.forEach((part) => {
-    if (part.length <= 220) {
-      output.push(part);
+    const lineWithoutCite = cleanupLine(line.replace(citePattern, ' '));
+    if (!lineWithoutCite) return;
+
+    if (/^[一二三四五六七八九十]+、/.test(lineWithoutCite)) {
+      blocks.push({ kind: 'heading', text: lineWithoutCite, citeNums: Array.from(new Set(citeNums)) });
+      return;
+    }
+    if ((lineWithoutCite.endsWith('：') || lineWithoutCite.endsWith(':')) && lineWithoutCite.length <= 28) {
+      blocks.push({ kind: 'subheading', text: lineWithoutCite.replace(/[：:]$/, ''), citeNums: Array.from(new Set(citeNums)) });
       return;
     }
 
-    const sentences = part.split(/(?<=[。！？])/).map((s) => s.trim()).filter(Boolean);
-    if (!sentences.length) {
-      output.push(part.slice(0, 220));
-      return;
-    }
-
-    let current = '';
-    sentences.forEach((sentence) => {
-      if ((current + sentence).length > 180 && current) {
-        output.push(current.trim());
-        current = sentence;
-      } else {
-        current += sentence;
-      }
-    });
-    if (current.trim()) output.push(current.trim());
+    pushParagraph(lineWithoutCite, citeNums);
   });
 
-  return output.slice(0, 12);
-}
-
-function guessSmartItemTitle(paragraph: string, idx: number): string {
-  const normalized = paragraph.replace(/^[•\-]\s*/, '').trim();
-  const candidate = normalized.split(/[，。：:]/)[0].trim();
-  if (candidate.length >= 4 && candidate.length <= 18) return candidate;
-  return `信息点${idx + 1}`;
+  return blocks.filter((b) => b.text.length > 1).slice(0, 120);
 }
 
 function parseHost(url: string): string {
@@ -625,13 +645,20 @@ export function SearchResultPage({ participantId = 'p001', userProfile, forcedKe
     () => normalizeSmartAnswer(bundle?.smart?.answer_text || smartSummary || ''),
     [bundle?.smart?.answer_text, smartSummary]
   );
-  const smartAnswerParagraphs = useMemo(
-    () => splitSmartParagraphs(smartAnswerText),
-    [smartAnswerText]
+  const smartRenderBlocks = useMemo(
+    () => buildSmartRenderBlocks(bundle?.smart?.answer_text || smartSummary || ''),
+    [bundle?.smart?.answer_text, smartSummary]
   );
-  const smartLeadParagraph = smartAnswerParagraphs[0] || smartSummary;
-  const smartBodyParagraphs = smartAnswerParagraphs.slice(1);
   const smartGallery = (bundle?.smart?.gallery || []).slice(0, 3);
+  const firstSmartParagraphIdx = useMemo(
+    () => smartRenderBlocks.findIndex((block) => block.kind === 'paragraph'),
+    [smartRenderBlocks]
+  );
+  const smartPrimaryBlock = firstSmartParagraphIdx >= 0 ? smartRenderBlocks[firstSmartParagraphIdx] : null;
+  const smartDisplayBlocks = useMemo(
+    () => smartRenderBlocks.filter((_, idx) => idx !== firstSmartParagraphIdx),
+    [smartRenderBlocks, firstSmartParagraphIdx]
+  );
 
   const postById = useMemo(() => {
     const m = new Map<string, LabPost>();
@@ -872,18 +899,54 @@ export function SearchResultPage({ participantId = 'p001', userProfile, forcedKe
     if (source.mid) {
       const post = postById.get(source.mid);
       if (post) return `@${post.author_name}`;
-      return `微博原文 ${source.mid.slice(-6)}`;
+      return `原文${idx + 1}`;
     }
     if (source.scheme.startsWith('historyweibo://')) return `历史微博 ${idx + 1}`;
     if (source.scheme.startsWith('http')) {
       const host = parseHost(source.scheme);
-      return host ? `网页来源 ${host}` : `网页来源 ${idx + 1}`;
+      return host ? `网页 ${host}` : `网页来源 ${idx + 1}`;
     }
     if (source.search_url) {
       const host = parseHost(source.search_url);
       return host ? `来源 ${host}` : `来源 ${idx + 1}`;
     }
     return `来源 ${idx + 1}`;
+  };
+
+  const sourcesForCiteNums = (nums: number[]) => {
+    const seen = new Set<string>();
+    const out: Array<{ source: { scheme: string; mid: string; search_url: string }; idx: number }> = [];
+    nums.forEach((num) => {
+      const idx = num - 1;
+      if (idx < 0 || idx >= smartSourceLinks.length) return;
+      const source = smartSourceLinks[idx];
+      const key = `${source.scheme}|${source.mid}|${source.search_url}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({ source, idx });
+    });
+    return out.slice(0, 5);
+  };
+
+  const renderInlineSourceCapsules = (nums: number[], keyPrefix: string) => {
+    const refs = sourcesForCiteNums(nums);
+    if (!refs.length) return null;
+    return (
+      <div className="mt-1.5 flex flex-wrap gap-1.5">
+        {refs.map(({ source, idx }, localIdx) => (
+          <button
+            key={`${keyPrefix}_${idx}_${localIdx}`}
+            type="button"
+            data-post-id={source.mid || `smart_source_${idx}`}
+            data-action="open_smart_source_capsule"
+            className="rounded-full bg-[#f1f2f5] px-2.5 py-1 text-[13px] text-[#666f80]"
+            onClick={() => openSmartSource(source, idx)}
+          >
+            {getSmartSourceLabel(source, idx)}
+          </button>
+        ))}
+      </div>
+    );
   };
 
   const openSmartSource = (source: { scheme: string; mid: string; search_url: string }, idx: number) => {
@@ -1146,31 +1209,8 @@ export function SearchResultPage({ participantId = 'p001', userProfile, forcedKe
               <span>◔ 回答 · 深度思考 ▾</span>
               <span>时间：54分钟前</span>
             </div>
-            <p className="mt-3 text-[15px] leading-8 text-[#2d2f35]">{smartLeadParagraph}</p>
-
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {smartSourceLinks.slice(0, 3).map((source, idx) => {
-                const post = source.mid ? postById.get(source.mid) : undefined;
-                const c1 = Math.max(1, Math.min(9, Math.floor(n(post?.reposts_count) / 20) || 1));
-                const c2 = Math.max(1, Math.min(9, Math.floor(n(post?.comments_count) / 100) || 3));
-                return (
-                  <span key={`smart_top_capsule_${idx}`} className="inline-flex items-center gap-1 align-middle">
-                    <button
-                      type="button"
-                      className="inline-flex h-7 max-w-[10.5rem] items-center rounded-full bg-[#f1f1f1] px-2 text-[14px] leading-none text-[#7a7a7a]"
-                      data-post-id={source.mid || `smart_source_${idx}`}
-                      data-action="open_smart_source_capsule"
-                      onClick={() => openSmartSource(source, idx)}
-                    >
-                      <span className="truncate">{getSmartSourceLabel(source, idx)}</span>
-                    </button>
-                    <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-full bg-[#f1f1f1] px-2 text-[13px] text-[#7a7a7a]">{c1}</span>
-                    <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-full bg-[#f1f1f1] px-2 text-[13px] text-[#7a7a7a]">{c2}</span>
-                    <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-full bg-[#f1f1f1] px-2 text-[13px] text-[#7a7a7a]">···</span>
-                  </span>
-                );
-              })}
-            </div>
+            <p className="mt-3 text-[15px] leading-8 text-[#2d2f35]">{smartPrimaryBlock?.text || smartSummary}</p>
+            {renderInlineSourceCapsules(smartPrimaryBlock?.citeNums || [], 'smart_primary')}
 
             {smartMedia.length ? (
               <div className="mt-3 grid grid-cols-3 gap-1.5">
@@ -1190,36 +1230,23 @@ export function SearchResultPage({ participantId = 'p001', userProfile, forcedKe
               </div>
             ) : null}
 
-            <h3 className="mt-4 text-[20px] font-semibold text-[#2d2f35]">一、事件核心信息</h3>
-            <div className="mt-2 space-y-4">
-              {smartBodyParagraphs.length ? (
-                smartBodyParagraphs.map((paragraph, idx) => (
-                  <div key={`smart_item_${idx}`}>
-                    <p className="text-[16px] font-semibold text-[#2d2f35]">• {guessSmartItemTitle(paragraph, idx)}</p>
-                    <p className="mt-1 pl-5 text-[15px] leading-8 text-[#2d2f35]">{paragraph}</p>
+            <div className="mt-4 space-y-3">
+              {smartDisplayBlocks.length ? (
+                smartDisplayBlocks.map((block, idx) => (
+                  <div key={`smart_block_${idx}`}>
+                    {block.kind === 'heading' ? (
+                      <h3 className="text-[20px] font-semibold text-[#2d2f35]">{block.text}</h3>
+                    ) : block.kind === 'subheading' ? (
+                      <p className="text-[16px] font-semibold text-[#2d2f35]">• {block.text}</p>
+                    ) : (
+                      <p className="text-[15px] leading-8 text-[#2d2f35]">{block.text}</p>
+                    )}
+                    {renderInlineSourceCapsules(block.citeNums, `smart_block_${idx}`)}
                   </div>
                 ))
               ) : (
                 <p className="text-[15px] leading-8 text-[#2d2f35]">{smartSummary}</p>
               )}
-            </div>
-
-            <div className="mt-4 border-t border-[#f0f1f4] pt-3">
-              <p className="text-[16px] font-semibold text-[#2d2f35]">原文胶囊（{smartSourceLinks.length}）</p>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {smartSourceLinks.map((source, idx) => (
-                  <button
-                    key={`${source.scheme}_${source.mid}_${idx}`}
-                    type="button"
-                    data-post-id={source.mid || `smart_source_${idx}`}
-                    data-action="open_smart_source_capsule"
-                    className="rounded-full bg-[#f1f2f5] px-2.5 py-1.5 text-[13px] text-[#666f80]"
-                    onClick={() => openSmartSource(source, idx)}
-                  >
-                    {getSmartSourceLabel(source, idx)}
-                  </button>
-                ))}
-              </div>
             </div>
           </div>
 

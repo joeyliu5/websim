@@ -3,7 +3,6 @@ import { LoginPage } from './pages/LoginPage';
 import { SearchResultPage } from './pages/SearchResultPage';
 import type { UserProfile } from './types/experiment';
 
-const PROFILE_KEY = 'weibsim_profile';
 const PARTICIPANT_KEY = 'weibsim_participant_id';
 
 function getParticipantId() {
@@ -26,24 +25,14 @@ export default function App() {
     return k || '#晚5秒要付1700高速费当事人发声#';
   }, []);
 
-  const [profile, setProfile] = useState<UserProfile | null>(() => {
-    const cached = sessionStorage.getItem(PROFILE_KEY);
-    if (!cached) return null;
-    try {
-      const parsed = JSON.parse(cached) as UserProfile;
-      if (typeof parsed?.age === 'number' && typeof parsed?.occupation === 'string') return parsed;
-      return null;
-    } catch {
-      return null;
-    }
-  });
+  // Always require fresh login info for each new page-open/refresh.
+  const [profile, setProfile] = useState<UserProfile | null>(null);
 
   if (!profile) {
     return (
       <LoginPage
         participantId={participantId}
         onSubmit={(payload) => {
-          sessionStorage.setItem(PROFILE_KEY, JSON.stringify(payload));
           setProfile(payload);
         }}
       />
