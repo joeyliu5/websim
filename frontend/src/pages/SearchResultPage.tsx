@@ -613,7 +613,17 @@ export function SearchResultPage({ participantId = 'p001', userProfile, forcedKe
     posts.find((p) => Boolean(p.video_url || p.video_stream_url)) ||
     posts[0];
   const feedPosts = posts.filter((p) => p.post_id !== headlinePost?.post_id);
-  const topicThumb = smartGallery[0] || headlinePost?.video_poster || headlinePost?.images?.[0] || '';
+  const topicThumb = useMemo(() => {
+    const fallback = '/case-assets/smart-cover.png';
+    const candidates = [
+      headlinePost?.images?.[0] || '',
+      headlinePost?.video_poster || '',
+      ...smartGallery,
+      fallback,
+    ].filter(Boolean);
+    const localFirst = candidates.find((item) => item.startsWith('/'));
+    return localFirst || candidates[0] || fallback;
+  }, [headlinePost?.images, headlinePost?.video_poster, smartGallery]);
   const smartMedia = useMemo(() => {
     const merged: string[] = [];
     const seen = new Set<string>();
@@ -996,7 +1006,17 @@ export function SearchResultPage({ participantId = 'p001', userProfile, forcedKe
           {!showSmartDetail ? (
             <div className="mb-1 flex items-start gap-2 rounded-t-xl bg-white px-2 pt-2 text-[#3f4652]" data-observe-id="smart_topic_banner" data-post-id="smart_topic_banner">
               {topicThumb ? (
-                <img src={topicThumb} alt="topic-thumb" className="h-16 w-16 rounded-md object-cover" />
+                <img
+                  src={topicThumb}
+                  alt="topic-thumb"
+                  className="h-16 w-16 rounded-md object-cover"
+                  onError={(e) => {
+                    const el = e.currentTarget;
+                    if (el.dataset.fallbackApplied === '1') return;
+                    el.dataset.fallbackApplied = '1';
+                    el.src = '/case-assets/smart-cover.png';
+                  }}
+                />
               ) : (
                 <div className="h-16 w-16 rounded-md bg-gray-200" />
               )}
