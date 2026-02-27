@@ -7,7 +7,29 @@ const PORT = process.env.PORT || 3001;
 const LOG_FILE = path.join(__dirname, 'logs', 'events.jsonl');
 const ACTION_LOG_FILE = path.join(__dirname, 'logs', 'actions.jsonl');
 const COMMENT_LOG_FILE = path.join(__dirname, 'logs', 'comments.jsonl');
-const DIST_DIR = path.resolve(__dirname, '../frontend/dist');
+const DIST_CANDIDATES = [
+  process.env.FRONTEND_DIST_DIR,
+  path.resolve(__dirname, '../frontend/dist'),
+  path.resolve(process.cwd(), 'frontend/dist'),
+  path.resolve(__dirname, 'frontend/dist'),
+  path.resolve(process.cwd(), 'dist'),
+  path.resolve(__dirname, 'dist'),
+].filter(Boolean);
+
+function resolveDistDir() {
+  for (const candidate of DIST_CANDIDATES) {
+    try {
+      if (fs.existsSync(path.join(candidate, 'index.html'))) {
+        return candidate;
+      }
+    } catch {
+      // ignore invalid candidate path
+    }
+  }
+  return null;
+}
+
+const DIST_DIR = resolveDistDir();
 
 app.use(express.json({ limit: '1mb' }));
 app.use(express.text({ type: ['text/plain', 'application/json'], limit: '1mb' }));
@@ -166,7 +188,8 @@ app.get('/api/health', (_, res) => {
   res.json({ ok: true, ts: Date.now() });
 });
 
-if (fs.existsSync(DIST_DIR)) {
+if (DIST_DIR && fs.existsSync(DIST_DIR)) {
+  console.log(`[static] serving frontend from: ${DIST_DIR}`);
   app.use(express.static(DIST_DIR));
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api/')) {
@@ -175,6 +198,8 @@ if (fs.existsSync(DIST_DIR)) {
     }
     res.sendFile(path.join(DIST_DIR, 'index.html'));
   });
+} else {
+  console.warn('[static] frontend dist not found. Checked paths:', DIST_CANDIDATES);
 }
 
 ensureLogFiles()
