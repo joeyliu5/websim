@@ -127,6 +127,19 @@ function cleanupLine(line: string): string {
     .trim();
 }
 
+function isLikelyNoiseLine(line: string): boolean {
+  const cleaned = cleanupLine(line);
+  if (!cleaned) return true;
+  if (/(tokens truncated|quote_list|version|index|label|scheme|data|raw_msg_markdown|emphasis-tag)/i.test(cleaned)) return true;
+  if (cleaned.length <= 2) return true;
+  const hasPunc = /[，。！？；：]/.test(cleaned);
+  if (!hasPunc) {
+    const chunks = cleaned.match(/[A-Za-z][A-Za-z0-9-]{1,}|[\u4e00-\u9fa5]{2,6}/g) || [];
+    if (chunks.length >= 4 && cleaned.length <= 72) return true;
+  }
+  return false;
+}
+
 function buildSmartRenderBlocks(raw: string): SmartRenderBlock[] {
   let text = normalizeSmartAnswer(raw);
   text = text.replace(/<media-block>[\s\S]*?<\/media-block>/g, '');
@@ -141,22 +154,27 @@ function buildSmartRenderBlocks(raw: string): SmartRenderBlock[] {
   text = text.replace(/[ \t]+/g, ' ');
   text = text.replace(/\n{3,}/g, '\n\n');
 
-  const lines = text
+  const rawLines = text
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean)
     .filter((line) => !/(tokens truncated|emphasis-tag|data-type=|sinaweibo:\/\/|historyweibo:\/\/)/i.test(line));
 
+  const lines: string[] = [];
+  rawLines.forEach((line) => {
+    if (line.length <= 260) {
+      lines.push(line);
+      return;
+    }
+    const pieces = line.split(/(?<=[。！？])/).map((x) => x.trim()).filter(Boolean);
+    if (pieces.length > 1) lines.push(...pieces);
+    else lines.push(line);
+  });
+
   const blocks: SmartRenderBlock[] = [];
   const pushParagraph = (textValue: string, cites: number[]) => {
     const cleaned = cleanupLine(textValue);
-    if (!cleaned) return;
-    if (blocks.length && blocks[blocks.length - 1].kind === 'paragraph') {
-      const prev = blocks[blocks.length - 1];
-      prev.text = `${prev.text}${prev.text.endsWith('。') || prev.text.endsWith('！') || prev.text.endsWith('？') ? '' : '。'}${cleaned}`;
-      prev.citeNums = Array.from(new Set([...prev.citeNums, ...cites]));
-      return;
-    }
+    if (!cleaned || isLikelyNoiseLine(cleaned)) return;
     blocks.push({ kind: 'paragraph', text: cleaned, citeNums: Array.from(new Set(cites)) });
   };
 
@@ -173,7 +191,7 @@ function buildSmartRenderBlocks(raw: string): SmartRenderBlock[] {
     }
 
     const lineWithoutCite = cleanupLine(line.replace(citePattern, ' '));
-    if (!lineWithoutCite) return;
+    if (!lineWithoutCite || isLikelyNoiseLine(lineWithoutCite)) return;
 
     if (/^[一二三四五六七八九十]+、/.test(lineWithoutCite)) {
       blocks.push({ kind: 'heading', text: lineWithoutCite, citeNums: Array.from(new Set(citeNums)) });
@@ -187,15 +205,10 @@ function buildSmartRenderBlocks(raw: string): SmartRenderBlock[] {
     pushParagraph(lineWithoutCite, citeNums);
   });
 
-  return blocks.filter((b) => b.text.length > 1).slice(0, 120);
-}
-
-function parseHost(url: string): string {
-  try {
-    return new URL(url).host.replace(/^www\./, '');
-  } catch {
-    return '';
-  }
+  return blocks
+    .filter((b) => b.text.length > 5)
+    .filter((b) => !isLikelyNoiseLine(b.text))
+    .slice(0, 22);
 }
 
 async function saveAction(payload: Record<string, unknown>) {
@@ -895,22 +908,10 @@ export function SearchResultPage({ participantId = 'p001', userProfile, forcedKe
     zhiSouRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
-  const getSmartSourceLabel = (source: { scheme: string; mid: string; search_url: string }, idx: number) => {
-    if (source.mid) {
-      const post = postById.get(source.mid);
-      if (post) return `@${post.author_name}`;
-      return `原文${idx + 1}`;
-    }
-    if (source.scheme.startsWith('historyweibo://')) return `历史微博 ${idx + 1}`;
-    if (source.scheme.startsWith('http')) {
-      const host = parseHost(source.scheme);
-      return host ? `网页 ${host}` : `网页来源 ${idx + 1}`;
-    }
-    if (source.search_url) {
-      const host = parseHost(source.search_url);
-      return host ? `来源 ${host}` : `来源 ${idx + 1}`;
-    }
-    return `来源 ${idx + 1}`;
+  const getSmartSourceLabel = (source: { scheme: string; mid: string; search_url: string }) => {
+    const post = source.mid ? postById.get(source.mid) : undefined;
+    if (post) return `@${post.author_name}`;
+    return '@原文';
   };
 
   const sourcesForCiteNums = (nums: number[]) => {
@@ -920,32 +921,34 @@ export function SearchResultPage({ participantId = 'p001', userProfile, forcedKe
       const idx = num - 1;
       if (idx < 0 || idx >= smartSourceLinks.length) return;
       const source = smartSourceLinks[idx];
+      const post = source.mid ? postById.get(source.mid) : undefined;
+      if (!post) return;
       const key = `${source.scheme}|${source.mid}|${source.search_url}`;
       if (seen.has(key)) return;
       seen.add(key);
       out.push({ source, idx });
     });
-    return out.slice(0, 5);
+    return out.slice(0, 3);
   };
 
   const renderInlineSourceCapsules = (nums: number[], keyPrefix: string) => {
     const refs = sourcesForCiteNums(nums);
     if (!refs.length) return null;
     return (
-      <div className="mt-1.5 flex flex-wrap gap-1.5">
+      <span className="ml-1 inline-flex flex-wrap gap-1 align-middle">
         {refs.map(({ source, idx }, localIdx) => (
           <button
             key={`${keyPrefix}_${idx}_${localIdx}`}
             type="button"
             data-post-id={source.mid || `smart_source_${idx}`}
             data-action="open_smart_source_capsule"
-            className="rounded-full bg-[#f1f2f5] px-2.5 py-1 text-[13px] text-[#666f80]"
+            className="h-6 rounded-full bg-[#eef0f4] px-2 text-[12px] leading-6 text-[#697386]"
             onClick={() => openSmartSource(source, idx)}
           >
-            {getSmartSourceLabel(source, idx)}
+            {getSmartSourceLabel(source)}
           </button>
         ))}
-      </div>
+      </span>
     );
   };
 
@@ -965,20 +968,6 @@ export function SearchResultPage({ participantId = 'p001', userProfile, forcedKe
     const post = source.mid ? postById.get(source.mid) : undefined;
     if (post) {
       openPostDetail(post);
-      return;
-    }
-
-    let targetUrl = '';
-    if (source.scheme.startsWith('http')) {
-      targetUrl = source.scheme;
-    } else if (source.search_url) {
-      targetUrl = source.search_url;
-    } else if (source.mid) {
-      targetUrl = `https://s.weibo.com/weibo?q=${encodeURIComponent(source.mid)}&page=1`;
-    }
-
-    if (targetUrl) {
-      window.open(targetUrl, '_blank', 'noopener,noreferrer');
     }
   };
 
@@ -1209,8 +1198,10 @@ export function SearchResultPage({ participantId = 'p001', userProfile, forcedKe
               <span>◔ 回答 · 深度思考 ▾</span>
               <span>时间：54分钟前</span>
             </div>
-            <p className="mt-3 text-[15px] leading-8 text-[#2d2f35]">{smartPrimaryBlock?.text || smartSummary}</p>
-            {renderInlineSourceCapsules(smartPrimaryBlock?.citeNums || [], 'smart_primary')}
+            <p className="mt-3 text-[16px] leading-9 text-[#2d2f35]">
+              {smartPrimaryBlock?.text || smartSummary}
+              {renderInlineSourceCapsules(smartPrimaryBlock?.citeNums || [], 'smart_primary')}
+            </p>
 
             {smartMedia.length ? (
               <div className="mt-3 grid grid-cols-3 gap-1.5">
@@ -1230,18 +1221,20 @@ export function SearchResultPage({ participantId = 'p001', userProfile, forcedKe
               </div>
             ) : null}
 
-            <div className="mt-4 space-y-3">
+            <div className="mt-5 space-y-5">
               {smartDisplayBlocks.length ? (
                 smartDisplayBlocks.map((block, idx) => (
                   <div key={`smart_block_${idx}`}>
                     {block.kind === 'heading' ? (
-                      <h3 className="text-[20px] font-semibold text-[#2d2f35]">{block.text}</h3>
+                      <h3 className="text-[21px] font-semibold text-[#2d2f35]">{block.text}</h3>
                     ) : block.kind === 'subheading' ? (
-                      <p className="text-[16px] font-semibold text-[#2d2f35]">• {block.text}</p>
+                      <p className="text-[17px] font-semibold text-[#2d2f35]">• {block.text}</p>
                     ) : (
-                      <p className="text-[15px] leading-8 text-[#2d2f35]">{block.text}</p>
+                      <p className="text-[16px] leading-9 text-[#2d2f35]">
+                        {block.text}
+                        {renderInlineSourceCapsules(block.citeNums, `smart_block_${idx}`)}
+                      </p>
                     )}
-                    {renderInlineSourceCapsules(block.citeNums, `smart_block_${idx}`)}
                   </div>
                 ))
               ) : (
