@@ -116,7 +116,18 @@ function parseCiteNums(raw: string): number[] {
 }
 
 function cleanupLine(line: string): string {
-  return line
+  const strippedNoise = line
+    .replace(
+      /(鹰城卫士[- ]?LISIR|是喵王呀|文秀佳财经网|VeryLucky图图|封面新闻新浪热点|封面新闻|新浪热点|VeryLucky|LISIR)/gi,
+      ' '
+    )
+    .replace(/@[\u4e00-\u9fa5A-Za-z0-9_-]{2,20}/g, ' ');
+
+  return strippedNoise
+    .replace(/人工\/ETC车道需保持一致，混用易致计费异常。?/g, ' ')
+    .replace(/喜欢和爱都很多远处守护你陈-?31。?/g, ' ')
+    .replace(/喜欢和爱都很多/g, ' ')
+    .replace(/远处守护你陈-?\d{1,3}/g, ' ')
     .replace(/^#{1,6}\s*/g, '')
     .replace(/\*\*([^*]+)\*\*/g, '$1')
     .replace(/\*([^*]+)\*/g, '$1')
@@ -130,6 +141,8 @@ function cleanupLine(line: string): string {
 function isLikelyNoiseLine(line: string): boolean {
   const cleaned = cleanupLine(line);
   if (!cleaned) return true;
+  if (/(人工\/ETC车道需保持一致，混用易致计费异常|喜欢和爱都很多|远处守护你陈-?\d{1,3})/i.test(cleaned)) return true;
+  if (/(鹰城卫士|LISIR|喵王|文秀佳|VeryLucky|图图|封面新闻|新浪热点)/i.test(cleaned)) return true;
   if (/(tokens truncated|quote_list|version|index|label|scheme|data|raw_msg_markdown|emphasis-tag)/i.test(cleaned)) return true;
   if (cleaned.length <= 2) return true;
   const hasPunc = /[，。！？；：]/.test(cleaned);
@@ -138,6 +151,23 @@ function isLikelyNoiseLine(line: string): boolean {
     if (chunks.length >= 4 && cleaned.length <= 72) return true;
   }
   return false;
+}
+
+function removeOrphanStructuredBlocks(input: SmartRenderBlock[]): SmartRenderBlock[] {
+  const hasParagraphAfter = (index: number, kind: SmartRenderBlock['kind']) => {
+    for (let i = index + 1; i < input.length; i += 1) {
+      const next = input[i];
+      if (next.kind === 'paragraph') return true;
+      if (kind === 'heading' && next.kind === 'heading') return false;
+      if (kind === 'subheading' && (next.kind === 'subheading' || next.kind === 'heading')) return false;
+    }
+    return false;
+  };
+
+  return input.filter((block, idx) => {
+    if (block.kind === 'paragraph') return true;
+    return hasParagraphAfter(idx, block.kind);
+  });
 }
 
 function buildSmartRenderBlocks(raw: string): SmartRenderBlock[] {
@@ -181,6 +211,9 @@ function buildSmartRenderBlocks(raw: string): SmartRenderBlock[] {
   lines.forEach((line) => {
     const citeNums: number[] = [];
     const citePattern = /\[\[CITE:([0-9,\s]+)\]\]/g;
+    const rawNoCite = line.replace(citePattern, ' ');
+    const isDigitBullet = /^\s*\d+[.)、]\s*/.test(rawNoCite);
+    const isDotBullet = /^\s*[•·\-]\s*/.test(rawNoCite);
     let match: RegExpExecArray | null;
     while ((match = citePattern.exec(line)) !== null) {
       match[1]
@@ -197,18 +230,41 @@ function buildSmartRenderBlocks(raw: string): SmartRenderBlock[] {
       blocks.push({ kind: 'heading', text: lineWithoutCite, citeNums: Array.from(new Set(citeNums)) });
       return;
     }
+    if ((isDigitBullet || isDotBullet) && lineWithoutCite.length <= 24) {
+      blocks.push({ kind: 'subheading', text: lineWithoutCite.replace(/[：:]$/, ''), citeNums: Array.from(new Set(citeNums)) });
+      return;
+    }
     if ((lineWithoutCite.endsWith('：') || lineWithoutCite.endsWith(':')) && lineWithoutCite.length <= 28) {
       blocks.push({ kind: 'subheading', text: lineWithoutCite.replace(/[：:]$/, ''), citeNums: Array.from(new Set(citeNums)) });
       return;
     }
+    if (lineWithoutCite.length <= 16 && /(细节|焦点|依据|进展|影响|建议|争议|时间线|要点|损失|规则|核心|原因|结果)$/.test(lineWithoutCite)) {
+      blocks.push({ kind: 'subheading', text: lineWithoutCite, citeNums: Array.from(new Set(citeNums)) });
+      return;
+    }
 
+    const sentenceParts = lineWithoutCite
+      .split(/(?<=[。！？])/)
+      .map((x) => x.trim())
+      .filter(Boolean);
+
+    if (sentenceParts.length > 1) {
+      sentenceParts.forEach((sentence, idx) => {
+        const isLast = idx === sentenceParts.length - 1;
+        pushParagraph(sentence, isLast ? citeNums : []);
+      });
+      return;
+    }
     pushParagraph(lineWithoutCite, citeNums);
   });
 
-  return blocks
+  const cleaned = blocks
     .filter((b) => b.text.length > 5)
-    .filter((b) => !isLikelyNoiseLine(b.text))
-    .slice(0, 22);
+    .filter((b) => !isLikelyNoiseLine(b.text));
+
+  const structured = removeOrphanStructuredBlocks(cleaned);
+  const limited = structured.slice(0, 22);
+  return removeOrphanStructuredBlocks(limited);
 }
 
 async function saveAction(payload: Record<string, unknown>) {
@@ -935,14 +991,14 @@ export function SearchResultPage({ participantId = 'p001', userProfile, forcedKe
     const refs = sourcesForCiteNums(nums);
     if (!refs.length) return null;
     return (
-      <span className="ml-1 inline-flex flex-wrap gap-1 align-middle">
+      <span className="ml-0.5 inline-flex flex-wrap items-center gap-0.5 align-[1px]">
         {refs.map(({ source, idx }, localIdx) => (
           <button
             key={`${keyPrefix}_${idx}_${localIdx}`}
             type="button"
             data-post-id={source.mid || `smart_source_${idx}`}
             data-action="open_smart_source_capsule"
-            className="h-6 rounded-full bg-[#eef0f4] px-2 text-[12px] leading-6 text-[#697386]"
+            className="h-[18px] rounded-[9px] bg-[#eceff3] px-1.5 text-[10px] leading-[18px] text-[#6b7380]"
             onClick={() => openSmartSource(source, idx)}
           >
             {getSmartSourceLabel(source)}
@@ -1191,7 +1247,12 @@ export function SearchResultPage({ participantId = 'p001', userProfile, forcedKe
       </header>
 
       {showSmartDetail ? (
-        <section className="bg-white pb-20" data-observe-id="smart_detail_main" data-post-id="smart_detail_main">
+        <section
+          className="bg-white pb-20"
+          style={{ fontFamily: "-apple-system,BlinkMacSystemFont,'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans SC',sans-serif" }}
+          data-observe-id="smart_detail_main"
+          data-post-id="smart_detail_main"
+        >
           <div className="px-4 pt-4">
             <h2 className="text-[22px] font-semibold text-[#2d2f35]">{smartTitle}</h2>
             <div className="mt-2 flex items-center justify-between text-[16px] text-[#8e94a3]">
@@ -1221,16 +1282,16 @@ export function SearchResultPage({ participantId = 'p001', userProfile, forcedKe
               </div>
             ) : null}
 
-            <div className="mt-5 space-y-5">
+            <div className="mt-4 space-y-4">
               {smartDisplayBlocks.length ? (
                 smartDisplayBlocks.map((block, idx) => (
                   <div key={`smart_block_${idx}`}>
                     {block.kind === 'heading' ? (
-                      <h3 className="text-[21px] font-semibold text-[#2d2f35]">{block.text}</h3>
+                      <h3 className="text-[20px] font-semibold text-[#2d2f35]">{block.text}</h3>
                     ) : block.kind === 'subheading' ? (
-                      <p className="text-[17px] font-semibold text-[#2d2f35]">• {block.text}</p>
+                      <p className="text-[16px] font-semibold text-[#2d2f35]">· {block.text}</p>
                     ) : (
-                      <p className="text-[16px] leading-9 text-[#2d2f35]">
+                      <p className="text-[16px] leading-8 text-[#2d2f35]">
                         {block.text}
                         {renderInlineSourceCapsules(block.citeNums, `smart_block_${idx}`)}
                       </p>
