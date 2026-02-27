@@ -9,7 +9,12 @@ services:
       npm --prefix frontend run build
       test -f frontend/dist/index.html
       npm --prefix backend ci
-    startCommand: node backend/server.js
+    startCommand: |
+      if [ ! -f frontend/dist/index.html ]; then
+        npm --prefix frontend ci
+        npm --prefix frontend run build
+      fi
+      node backend/server.js
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
