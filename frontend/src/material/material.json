@@ -1,0 +1,134 @@
+{
+  "news": [
+    {
+      "id": "n1",
+      "keyword": "女子在胖东来1小时消费15万",
+      "title": "#女子在胖东来1小时消费15万#",
+      "type": "hard",
+      "topicTag": "社会",
+      "aiSummary": "2月25日，一位河北女性跨省前往许昌胖东来购物，1分钟试戴并付款，累计消费近15万元，引发“信任溢价”与理性消费讨论。",
+      "aiFullText": "2月25日（大年初九），一位河北女性专程前往河南许昌胖东来商场黄金柜台，短时间内完成试戴与付款，购入多件黄金首饰，消费总额近15万元。事件经多账号传播后迅速登上热搜，讨论集中在品牌信任、排队成本、跨城消费动机与平台放大机制。",
+      "sourceProfiles": {
+        "mainstream": {
+          "name": "人民日报",
+          "verified": true,
+          "avatar": "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?auto=format&fit=crop&w=160&q=80"
+        },
+        "we-media": {
+          "name": "观察者阿木",
+          "verified": false,
+          "avatar": "https://images.unsplash.com/photo-1527980965255-d3b416303d12?auto=format&fit=crop&w=160&q=80"
+        }
+      },
+      "feedPosts": [
+        {
+          "id": "n1p1",
+          "text": "1小时消费15万，背后是消费者对服务与品控的长期信任，还是短视频传播导致的从众？",
+          "images": [
+            "https://images.unsplash.com/photo-1610375461246-83df859d849d?auto=format&fit=crop&w=500&q=80"
+          ],
+          "likes": 141,
+          "comments": 31,
+          "reposts": 12
+        },
+        {
+          "id": "n1p2",
+          "text": "排队1小时、试戴1分钟，这种效率和体验在传统商场并不常见。",
+          "images": [],
+          "likes": 89,
+          "comments": 17,
+          "reposts": 4
+        }
+      ],
+      "detail": {
+        "fullText": "完整正文占位：请在此填充实验原文内容（可多段落）。",
+        "comments": [
+          {
+            "id": "n1c1",
+            "user": "林川",
+            "text": "如果服务体验稳定，跨城消费并不奇怪。",
+            "likes": 23
+          }
+        ]
+      }
+    },
+    {
+      "id": "n2",
+      "keyword": "春运返程客流再创新高",
+      "title": "#春运返程客流再创新高#",
+      "type": "hard",
+      "topicTag": "社会",
+      "aiSummary": "多地交通部门发布返程高峰数据，铁路与民航客流连续增长，运力调配与拥堵治理成为关注焦点。",
+      "aiFullText": "完整 AI 文本占位。",
+      "sourceProfiles": {
+        "mainstream": {
+          "name": "新华社",
+          "verified": true,
+          "avatar": "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?auto=format&fit=crop&w=160&q=80"
+        },
+        "we-media": {
+          "name": "交通观察君",
+          "verified": false,
+          "avatar": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=160&q=80"
+        }
+      },
+      "feedPosts": [],
+      "detail": {
+        "fullText": "完整正文占位",
+        "comments": []
+      }
+    },
+    {
+      "id": "n3",
+      "keyword": "新片票房口碑双高",
+      "title": "#新片票房口碑双高#",
+      "type": "soft",
+      "topicTag": "文娱",
+      "aiSummary": "春节档新片在社交平台热议，票房与口碑同步上升。",
+      "aiFullText": "完整 AI 文本占位。",
+      "sourceProfiles": {
+        "mainstream": {
+          "name": "央视新闻",
+          "verified": true,
+          "avatar": "https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?auto=format&fit=crop&w=160&q=80"
+        },
+        "we-media": {
+          "name": "影视笔记本",
+          "verified": false,
+          "avatar": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=160&q=80"
+        }
+      },
+      "feedPosts": [],
+      "detail": {
+        "fullText": "完整正文占位",
+        "comments": []
+      }
+    },
+    {
+      "id": "n4",
+      "keyword": "城市夜游热度上升",
+      "title": "#城市夜游热度上升#",
+      "type": "soft",
+      "topicTag": "生活",
+      "aiSummary": "夜间文旅消费增长，沉浸式市集和演出带动商圈客流。",
+      "aiFullText": "完整 AI 文本占位。",
+      "sourceProfiles": {
+        "mainstream": {
+          "name": "中国青年报",
+          "verified": true,
+          "avatar": "https://images.unsplash.com/photo-1463453091185-61582044d556?auto=format&fit=crop&w=160&q=80"
+        },
+        "we-media": {
+          "name": "城市漫游计划",
+          "verified": false,
+          "avatar": "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=160&q=80"
+        }
+      },
+      "feedPosts": [],
+      "detail": {
+        "fullText": "完整正文占位",
+        "comments": []
+      }
+    }
+  ]
+}

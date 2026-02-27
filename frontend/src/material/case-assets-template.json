@@ -1,0 +1,78 @@
+{
+  "topic": "晚5秒要付1700高速费当事人发声",
+  "smart_intro": "5秒钟的误差让一对自驾3700公里返程的夫妻支付了1700元全程高速费，当事人张女士哭笑不得地表示“当花钱买教训了”，这一事件引发全网对高速免费规则和安全风险的深度讨论。",
+  "mentions": [
+    {
+      "label": "财经网11232634",
+      "source": "cjw"
+    },
+    {
+      "label": "潇湘晨报1202934",
+      "source": "xxcb"
+    },
+    {
+      "label": "帧间雨1048",
+      "source": "fjy"
+    }
+  ],
+  "smart_images": {
+    "cover": "/case-assets/smart-cover.jpg",
+    "risk": "/case-assets/smart-risk.jpg",
+    "gallery": [
+      "/case-assets/smart-g1.jpg",
+      "/case-assets/smart-g2.jpg",
+      "/case-assets/smart-g3.jpg"
+    ]
+  },
+  "originals": {
+    "xxcb": {
+      "name": "潇湘晨报",
+      "avatar": "/case-assets/avatar-xxcb.jpg",
+      "time": "26-2-25 18:31",
+      "source": "来自微博视频号 已编辑",
+      "body": [
+        "把你的原文段落1放这里",
+        "把你的原文段落2放这里",
+        "把你的原文段落3放这里"
+      ],
+      "image": "/case-assets/original-xxcb.jpg",
+      "stats": {
+        "repost": 215,
+        "comment": 372,
+        "like": 5801
+      }
+    },
+    "cjw": {
+      "name": "财经网",
+      "avatar": "/case-assets/avatar-cjw.jpg",
+      "time": "25-10-9 20:17",
+      "source": "来自微博视频号",
+      "body": [
+        "财经网原文段落1",
+        "财经网原文段落2"
+      ],
+      "image": "/case-assets/original-cjw.jpg",
+      "stats": {
+        "repost": 98,
+        "comment": 220,
+        "like": 1540
+      }
+    },
+    "fjy": {
+      "name": "帧间雨",
+      "avatar": "/case-assets/avatar-fjy.jpg",
+      "time": "26-2-25 23:15",
+      "source": "来自冬天的第一场雪 发布于广东",
+      "body": [
+        "帧间雨原文段落1",
+        "帧间雨原文段落2"
+      ],
+      "image": "/case-assets/original-fjy.jpg",
+      "stats": {
+        "repost": 77,
+        "comment": 183,
+        "like": 945
+      }
+    }
+  }
+}
