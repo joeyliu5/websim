@@ -100,10 +100,74 @@ function normalizeSmartAnswer(raw: string): string {
   text = text.replace(/<think>[\s\S]*?<\/think>/g, '');
   text = text.replace(/```wbCustomBlock[\s\S]*?```/g, '');
   text = text.replace(/<media-block>[\s\S]*?<\/media-block>/g, '');
+  text = text.replace(/<[^>]+>/g, ' ');
+  text = text.replace(/wbCustomBlock[\s\S]*?(?=\n|$)/g, '');
+  text = text.replace(/https?:\/\/\S+/g, '');
+  text = text.replace(/`{1,3}/g, '');
   text = text.replace(/```[\s\S]*?```/g, '');
   text = text.replace(/\\n/g, '\n');
+  text = text.replace(/\r/g, '\n');
+  text = text.replace(/[ \t]+/g, ' ');
   text = text.replace(/\n{3,}/g, '\n\n');
-  return text.trim();
+
+  const lines = text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !/(tokens truncated|emphasis-tag|data-type=|sinaweibo:\/\/|historyweibo:\/\/)/i.test(line))
+    .filter((line) => {
+      if (/[，。！？；：]/.test(line)) return true;
+      if (line.length <= 1) return false;
+      const plain = /^[\u4e00-\u9fa5A-Za-z0-9·_\-\s]+$/.test(line);
+      if (!plain) return true;
+      if (line.length > 22) return false;
+      if (/(核心|信息|进度|建议|风险|规则|结论|要点|背景|经过|项目|时间线)/.test(line)) return true;
+      return false;
+    });
+
+  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+function splitSmartParagraphs(text: string): string[] {
+  const base = text
+    .split(/\n{2,}/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (!base.length) return [];
+
+  const output: string[] = [];
+  base.forEach((part) => {
+    if (part.length <= 220) {
+      output.push(part);
+      return;
+    }
+
+    const sentences = part.split(/(?<=[。！？])/).map((s) => s.trim()).filter(Boolean);
+    if (!sentences.length) {
+      output.push(part.slice(0, 220));
+      return;
+    }
+
+    let current = '';
+    sentences.forEach((sentence) => {
+      if ((current + sentence).length > 180 && current) {
+        output.push(current.trim());
+        current = sentence;
+      } else {
+        current += sentence;
+      }
+    });
+    if (current.trim()) output.push(current.trim());
+  });
+
+  return output.slice(0, 12);
+}
+
+function guessSmartItemTitle(paragraph: string, idx: number): string {
+  const normalized = paragraph.replace(/^[•\-]\s*/, '').trim();
+  const candidate = normalized.split(/[，。：:]/)[0].trim();
+  if (candidate.length >= 4 && candidate.length <= 18) return candidate;
+  return `信息点${idx + 1}`;
 }
 
 function parseHost(url: string): string {
@@ -562,9 +626,11 @@ export function SearchResultPage({ participantId = 'p001', userProfile, forcedKe
     [bundle?.smart?.answer_text, smartSummary]
   );
   const smartAnswerParagraphs = useMemo(
-    () => smartAnswerText.split(/\n{2,}/).map((s) => s.trim()).filter(Boolean),
+    () => splitSmartParagraphs(smartAnswerText),
     [smartAnswerText]
   );
+  const smartLeadParagraph = smartAnswerParagraphs[0] || smartSummary;
+  const smartBodyParagraphs = smartAnswerParagraphs.slice(1);
   const smartGallery = (bundle?.smart?.gallery || []).slice(0, 3);
 
   const postById = useMemo(() => {
@@ -1080,9 +1146,30 @@ export function SearchResultPage({ participantId = 'p001', userProfile, forcedKe
               <span>◔ 回答 · 深度思考 ▾</span>
               <span>时间：54分钟前</span>
             </div>
+            <p className="mt-3 text-[15px] leading-8 text-[#2d2f35]">{smartLeadParagraph}</p>
 
-            <div className="mt-2">
-              <p className="text-[14px] text-[#8e94a3]">完整回答（{smartAnswerText.length}字）</p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {smartSourceLinks.slice(0, 3).map((source, idx) => {
+                const post = source.mid ? postById.get(source.mid) : undefined;
+                const c1 = Math.max(1, Math.min(9, Math.floor(n(post?.reposts_count) / 20) || 1));
+                const c2 = Math.max(1, Math.min(9, Math.floor(n(post?.comments_count) / 100) || 3));
+                return (
+                  <span key={`smart_top_capsule_${idx}`} className="inline-flex items-center gap-1 align-middle">
+                    <button
+                      type="button"
+                      className="inline-flex h-7 max-w-[10.5rem] items-center rounded-full bg-[#f1f1f1] px-2 text-[14px] leading-none text-[#7a7a7a]"
+                      data-post-id={source.mid || `smart_source_${idx}`}
+                      data-action="open_smart_source_capsule"
+                      onClick={() => openSmartSource(source, idx)}
+                    >
+                      <span className="truncate">{getSmartSourceLabel(source, idx)}</span>
+                    </button>
+                    <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-full bg-[#f1f1f1] px-2 text-[13px] text-[#7a7a7a]">{c1}</span>
+                    <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-full bg-[#f1f1f1] px-2 text-[13px] text-[#7a7a7a]">{c2}</span>
+                    <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-full bg-[#f1f1f1] px-2 text-[13px] text-[#7a7a7a]">···</span>
+                  </span>
+                );
+              })}
             </div>
 
             {smartMedia.length ? (
@@ -1103,30 +1190,30 @@ export function SearchResultPage({ participantId = 'p001', userProfile, forcedKe
               </div>
             ) : null}
 
-            <div className="mt-4 space-y-3">
-              {smartAnswerParagraphs.length ? (
-                smartAnswerParagraphs.map((paragraph, idx) => (
-                  <p key={`answer_${idx}`} className="text-[15px] leading-7 text-[#2d2f35]">
-                    {paragraph}
-                  </p>
+            <h3 className="mt-4 text-[20px] font-semibold text-[#2d2f35]">一、事件核心信息</h3>
+            <div className="mt-2 space-y-4">
+              {smartBodyParagraphs.length ? (
+                smartBodyParagraphs.map((paragraph, idx) => (
+                  <div key={`smart_item_${idx}`}>
+                    <p className="text-[16px] font-semibold text-[#2d2f35]">• {guessSmartItemTitle(paragraph, idx)}</p>
+                    <p className="mt-1 pl-5 text-[15px] leading-8 text-[#2d2f35]">{paragraph}</p>
+                  </div>
                 ))
               ) : (
-                <p className="text-[15px] leading-7 text-[#2d2f35]">{smartSummary}</p>
+                <p className="text-[15px] leading-8 text-[#2d2f35]">{smartSummary}</p>
               )}
             </div>
 
-            <div className="mt-5">
-              <h3 className="text-[18px] font-semibold text-[#2d2f35]">
-                原文跳转（{smartSourceLinks.length}）
-              </h3>
-              <div className="mt-3 flex flex-wrap gap-2">
+            <div className="mt-4 border-t border-[#f0f1f4] pt-3">
+              <p className="text-[16px] font-semibold text-[#2d2f35]">原文胶囊（{smartSourceLinks.length}）</p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
                 {smartSourceLinks.map((source, idx) => (
                   <button
                     key={`${source.scheme}_${source.mid}_${idx}`}
                     type="button"
                     data-post-id={source.mid || `smart_source_${idx}`}
                     data-action="open_smart_source_capsule"
-                    className="rounded-full border border-[#e5e8ef] bg-[#f7f8fb] px-3 py-1.5 text-[13px] text-[#4a556b]"
+                    className="rounded-full bg-[#f1f2f5] px-2.5 py-1.5 text-[13px] text-[#666f80]"
                     onClick={() => openSmartSource(source, idx)}
                   >
                     {getSmartSourceLabel(source, idx)}
