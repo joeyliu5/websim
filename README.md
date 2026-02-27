@@ -20,14 +20,23 @@
 
 ```bash
 cd /Users/liujinzhuo/Documents/New\ project
-python3 scripts/build_weibo_lab_bundle.py --topic '晚5秒要付1700高速费当事人发声'
+bash scripts/switch_topic.sh '晚5秒要付1700高速费当事人发声'
 ```
 
-重新抓取并生成：
+等价命令（可调抓取页数）：
 
 ```bash
-python3 scripts/build_weibo_lab_bundle.py --topic '你的话题' --refresh --cookie-file '/Users/liujinzhuo/Documents/New project/cookie.rtf'
+python3 scripts/build_weibo_lab_bundle.py \
+  --topic '你的话题' \
+  --cookie-file '/Users/liujinzhuo/Documents/New project/cookie.rtf' \
+  --refresh \
+  --pages 5
 ```
+
+输出：
+
+- `frontend/public/data/lab_bundle.json`：前端使用的数据
+- `frontend/public/data/lab_bundle_media_manifest.json`：每条博文的头像/图片/封面映射清单（便于核对“一一对应”）
 
 ## 本地运行
 

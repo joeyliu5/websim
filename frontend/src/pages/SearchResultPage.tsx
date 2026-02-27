@@ -27,9 +27,15 @@ type LabBundle = {
   smart?: {
     title?: string;
     summary?: string;
+    answer_text?: string;
     intro?: string;
     gallery?: string[];
     link_list?: string[];
+    source_links?: Array<{
+      scheme?: string;
+      mid?: string;
+      search_url?: string;
+    }>;
   };
   posts: LabPost[];
 };
@@ -87,6 +93,25 @@ function getViewerNick() {
 function parseMidFromLink(link: string): string {
   const m = /mblogid=(\d+)/.exec(link || '');
   return m?.[1] || '';
+}
+
+function normalizeSmartAnswer(raw: string): string {
+  let text = raw || '';
+  text = text.replace(/<think>[\s\S]*?<\/think>/g, '');
+  text = text.replace(/```wbCustomBlock[\s\S]*?```/g, '');
+  text = text.replace(/<media-block>[\s\S]*?<\/media-block>/g, '');
+  text = text.replace(/```[\s\S]*?```/g, '');
+  text = text.replace(/\\n/g, '\n');
+  text = text.replace(/\n{3,}/g, '\n\n');
+  return text.trim();
+}
+
+function parseHost(url: string): string {
+  try {
+    return new URL(url).host.replace(/^www\./, '');
+  } catch {
+    return '';
+  }
 }
 
 async function saveAction(payload: Record<string, unknown>) {
@@ -529,10 +554,17 @@ export function SearchResultPage({ participantId = 'p001', userProfile, forcedKe
   }, []);
 
   const posts = bundle?.posts || [];
-  const preferredOpenMid = '5270493754038089';
   const keyword = forcedKeyword || bundle?.topic || '#晚5秒要付1700高速费当事人发声#';
   const smartTitle = bundle?.smart?.title || keyword;
   const smartSummary = bundle?.smart?.summary || bundle?.smart?.intro || '';
+  const smartAnswerText = useMemo(
+    () => normalizeSmartAnswer(bundle?.smart?.answer_text || smartSummary || ''),
+    [bundle?.smart?.answer_text, smartSummary]
+  );
+  const smartAnswerParagraphs = useMemo(
+    () => smartAnswerText.split(/\n{2,}/).map((s) => s.trim()).filter(Boolean),
+    [smartAnswerText]
+  );
   const smartGallery = (bundle?.smart?.gallery || []).slice(0, 3);
 
   const postById = useMemo(() => {
@@ -541,19 +573,40 @@ export function SearchResultPage({ participantId = 'p001', userProfile, forcedKe
     return m;
   }, [posts]);
 
-  const smartSourcePosts = useMemo(() => {
-    const links = bundle?.smart?.link_list || [];
-    const mids = links.map(parseMidFromLink).filter(Boolean);
+  const smartSourceLinks = useMemo(() => {
+    const raw = bundle?.smart?.source_links;
+    const fallback = (bundle?.smart?.link_list || []).map((scheme) => ({
+      scheme,
+      mid: parseMidFromLink(scheme),
+      search_url: '',
+    }));
+    const list = Array.isArray(raw) && raw.length ? raw : fallback;
+    const deduped: Array<{ scheme: string; mid: string; search_url: string }> = [];
     const seen = new Set<string>();
+    list.forEach((item) => {
+      const scheme = String(item?.scheme || '').trim();
+      const mid = String(item?.mid || parseMidFromLink(scheme) || '').trim();
+      const search_url = String(item?.search_url || '').trim();
+      if (!scheme && !search_url && !mid) return;
+      const key = `${scheme}|${mid}|${search_url}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      deduped.push({ scheme, mid, search_url });
+    });
+    return deduped;
+  }, [bundle?.smart?.source_links, bundle?.smart?.link_list]);
+
+  const smartSourcePosts = useMemo(() => {
     const out: LabPost[] = [];
-    mids.forEach((mid) => {
-      if (seen.has(mid)) return;
-      seen.add(mid);
-      const hit = postById.get(mid);
+    const seen = new Set<string>();
+    smartSourceLinks.forEach((source) => {
+      if (!source.mid || seen.has(source.mid)) return;
+      seen.add(source.mid);
+      const hit = postById.get(source.mid);
       if (hit) out.push(hit);
     });
     return out;
-  }, [bundle, postById]);
+  }, [postById, smartSourceLinks]);
 
   const headlinePost =
     posts.find((p) => p.post_id === '5270471789774972') ||
@@ -561,27 +614,16 @@ export function SearchResultPage({ participantId = 'p001', userProfile, forcedKe
     posts[0];
   const feedPosts = posts.filter((p) => p.post_id !== headlinePost?.post_id);
   const topicThumb = smartGallery[0] || headlinePost?.video_poster || headlinePost?.images?.[0] || '';
-  const smartRefs = useMemo(() => {
-    const base = smartSourcePosts.length ? smartSourcePosts : posts;
-    if (!base.length) return base;
-    const preferred = posts.find((p) => p.post_id === preferredOpenMid);
-    if (!preferred) return base;
-    const out: LabPost[] = [preferred];
-    base.forEach((p) => {
-      if (p.post_id !== preferred.post_id) out.push(p);
-    });
-    return out;
-  }, [smartSourcePosts, posts]);
   const smartMedia = useMemo(() => {
     const merged: string[] = [];
     const seen = new Set<string>();
-    [...smartGallery, ...(smartRefs[0]?.images || []), ...(smartRefs[1]?.images || []), ...(smartRefs[2]?.images || [])].forEach((img) => {
+    [...smartGallery, ...(smartSourcePosts[0]?.images || []), ...(smartSourcePosts[1]?.images || []), ...(smartSourcePosts[2]?.images || [])].forEach((img) => {
       if (!img || seen.has(img)) return;
       seen.add(img);
       merged.push(img);
     });
     return merged.slice(0, 3);
-  }, [smartGallery, smartRefs]);
+  }, [smartGallery, smartSourcePosts]);
 
   useEffect(() => {
     const onClick = (event: MouseEvent) => {
@@ -748,6 +790,57 @@ export function SearchResultPage({ participantId = 'p001', userProfile, forcedKe
     setActiveNav('smart');
     setShowSmartDetail(true);
     zhiSouRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const getSmartSourceLabel = (source: { scheme: string; mid: string; search_url: string }, idx: number) => {
+    if (source.mid) {
+      const post = postById.get(source.mid);
+      if (post) return `@${post.author_name}`;
+      return `微博原文 ${source.mid.slice(-6)}`;
+    }
+    if (source.scheme.startsWith('historyweibo://')) return `历史微博 ${idx + 1}`;
+    if (source.scheme.startsWith('http')) {
+      const host = parseHost(source.scheme);
+      return host ? `网页来源 ${host}` : `网页来源 ${idx + 1}`;
+    }
+    if (source.search_url) {
+      const host = parseHost(source.search_url);
+      return host ? `来源 ${host}` : `来源 ${idx + 1}`;
+    }
+    return `来源 ${idx + 1}`;
+  };
+
+  const openSmartSource = (source: { scheme: string; mid: string; search_url: string }, idx: number) => {
+    void saveAction({
+      action: 'open_smart_source_link',
+      page: currentPageId,
+      targetId: `smart_source_${idx}`,
+      targetPostId: source.mid || '',
+      sourceScheme: source.scheme,
+      sourceSearchUrl: source.search_url,
+      participantId,
+      nickname: viewerNick,
+      ts: Date.now(),
+    });
+
+    const post = source.mid ? postById.get(source.mid) : undefined;
+    if (post) {
+      openPostDetail(post);
+      return;
+    }
+
+    let targetUrl = '';
+    if (source.scheme.startsWith('http')) {
+      targetUrl = source.scheme;
+    } else if (source.search_url) {
+      targetUrl = source.search_url;
+    } else if (source.mid) {
+      targetUrl = `https://s.weibo.com/weibo?q=${encodeURIComponent(source.mid)}&page=1`;
+    }
+
+    if (targetUrl) {
+      window.open(targetUrl, '_blank', 'noopener,noreferrer');
+    }
   };
 
   const likeSmart = () => {
@@ -968,12 +1061,8 @@ export function SearchResultPage({ participantId = 'p001', userProfile, forcedKe
               <span>时间：54分钟前</span>
             </div>
 
-            <p className="mt-3 text-[15px] leading-7 text-[#2d2f35]">
-              重庆一对夫妇自驾3700公里返乡，却因在收费站晚驶出5秒错过高速免费时段，需支付全程1700余元通行费，当事人张女士坦言“又好笑又好气，当长教训了”。
-            </p>
-
             <div className="mt-2">
-              <SourceCapsule post={smartRefs[0]} onOpen={openPostDetail} />
+              <p className="text-[14px] text-[#8e94a3]">完整回答（{smartAnswerText.length}字）</p>
             </div>
 
             {smartMedia.length ? (
@@ -994,27 +1083,36 @@ export function SearchResultPage({ participantId = 'p001', userProfile, forcedKe
               </div>
             ) : null}
 
-            <p className="mt-4 text-[20px] font-semibold text-[#2d2f35]">事件核心：5秒误差触发全额收费</p>
-            <p className="mt-3 text-[17px] font-semibold text-[#2d2f35]">• 行程与损失</p>
-            <p className="mt-1 text-[15px] leading-7 text-[#2d2f35]">
-              张女士夫妇从新疆喀什自驾至重庆，全程约3700公里，耗时42小时。原计划在2月23日24时（春节免费截止时间）前驶离高速，但因收费站车流拥堵，最终于2月24日0时00分05秒出站。系统判定超时5秒，按全程计费收取1724元。
-            </p>
-            <div className="mt-1">
-              <SourceCapsule post={smartRefs[1]} onOpen={openPostDetail} />
+            <div className="mt-4 space-y-3">
+              {smartAnswerParagraphs.length ? (
+                smartAnswerParagraphs.map((paragraph, idx) => (
+                  <p key={`answer_${idx}`} className="text-[15px] leading-7 text-[#2d2f35]">
+                    {paragraph}
+                  </p>
+                ))
+              ) : (
+                <p className="text-[15px] leading-7 text-[#2d2f35]">{smartSummary}</p>
+              )}
             </div>
-            <p className="mt-3 text-[17px] font-semibold text-[#2d2f35]">• 规则执行无缓冲期</p>
-            <p className="mt-1 text-[15px] leading-7 text-[#2d2f35]">
-              根据高速免费政策，免费资格仅以车辆驶离出口收费车道时间为准。只要超出截止时点，系统即自动按全程收费，不存在“5秒宽限期”。
-            </p>
-            <div className="mt-1">
-              <SourceCapsule post={smartRefs[2]} onOpen={openPostDetail} />
-            </div>
-            <p className="mt-3 text-[17px] font-semibold text-[#2d2f35]">• 当事人发声与建议</p>
-            <p className="mt-1 text-[15px] leading-7 text-[#2d2f35]">
-              张女士表示“当时又好笑又好气，当长教训了”，并提醒长途返程应预留更多缓冲时间，或采用分段下高速策略规避风险。
-            </p>
-            <div className="mt-1">
-              <SourceCapsule post={smartRefs[3]} onOpen={openPostDetail} />
+
+            <div className="mt-5">
+              <h3 className="text-[18px] font-semibold text-[#2d2f35]">
+                原文跳转（{smartSourceLinks.length}）
+              </h3>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {smartSourceLinks.map((source, idx) => (
+                  <button
+                    key={`${source.scheme}_${source.mid}_${idx}`}
+                    type="button"
+                    data-post-id={source.mid || `smart_source_${idx}`}
+                    data-action="open_smart_source_capsule"
+                    className="rounded-full border border-[#e5e8ef] bg-[#f7f8fb] px-3 py-1.5 text-[13px] text-[#4a556b]"
+                    onClick={() => openSmartSource(source, idx)}
+                  >
+                    {getSmartSourceLabel(source, idx)}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -1042,7 +1140,7 @@ export function SearchResultPage({ participantId = 'p001', userProfile, forcedKe
                   targetId: 'smart_detail_main',
                   initialText: keyword,
                   title: keyword.replace(/#/g, ''),
-                  summary: smartSummary.slice(0, 60),
+                  summary: (smartAnswerText || smartSummary).slice(0, 60),
                   image: smartGallery[0] || '',
                 });
                 setShowCompose(true);

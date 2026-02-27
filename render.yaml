@@ -5,9 +5,11 @@ services:
     plan: free
     rootDir: .
     buildCommand: |
-      cd frontend && npm install && npm run build
-      cd ../backend && npm install
-    startCommand: cd backend && npm run start
+      npm --prefix frontend ci
+      npm --prefix frontend run build
+      test -f frontend/dist/index.html
+      npm --prefix backend ci
+    startCommand: node backend/server.js
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
