@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { LoginPage } from './pages/LoginPage';
+import { AdminPage } from './pages/AdminPage';
 import { SearchResultPage } from './pages/SearchResultPage';
 import type { UserProfile } from './types/experiment';
 
@@ -18,7 +19,7 @@ function getParticipantId() {
   return next;
 }
 
-export default function App() {
+function ExperimentApp() {
   const [participantId] = useState(() => getParticipantId());
   const keyword = useMemo(() => {
     const k = new URLSearchParams(window.location.search).get('keyword');
@@ -46,4 +47,12 @@ export default function App() {
       forcedKeyword={keyword}
     />
   );
+}
+
+export default function App() {
+  if (window.location.pathname.startsWith('/admin')) {
+    return <AdminPage />;
+  }
+
+  return <ExperimentApp />;
 }
