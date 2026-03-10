@@ -11,10 +11,10 @@
 - 微博移动端综合页 / 智搜页 / 正文页仿真
 - 话题素材自动组装：`lab_bundle.json`
 - 交互行为记录：
-  - 页面轨迹：`/api/events` -> `backend/logs/events.jsonl`
-  - 关键动作：`/api/actions` -> `backend/logs/actions.jsonl`
-  - 评论提交：`/api/comments` -> `backend/logs/comments.jsonl`
-  - Supabase 交互：`interaction_logs`（`view/click/stay`）
+  - 页面轨迹：`/api/events` -> `event_logs`
+  - 关键动作：`/api/actions` -> `action_logs`
+  - 评论提交：`/api/comments` -> `comment_logs`
+  - 轻量交互：`/api/interactions` -> `interaction_logs`（`view/click/stay`）
 
 ## 一键生成话题素材
 
@@ -47,17 +47,16 @@ cd frontend && npm install
 cd ../backend && npm install
 ```
 
-2. 配置 Supabase（可选，但推荐）
+2. 配置 Supabase（推荐）
 
 ```bash
-cd frontend
-cp .env.example .env
+打开 backend/supabase/weibo_sim_lab_schema.sql
 ```
 
-填写：
+在 Supabase SQL Editor 执行建表脚本，然后准备：
 
-- `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_ANON_KEY`
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
 
 3. 启动后端
 
@@ -104,10 +103,13 @@ git push -u origin main
 
 1. 在 Render 新建 Blueprint，连接 GitHub 仓库
 2. 选择仓库根目录，Render 会读取 `render.yaml`
-3. 自动执行：
+3. 在 Render 环境变量里填写：
+   - `SUPABASE_URL`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+4. 自动执行：
    - build: 构建前端 + 安装后端依赖
    - start: 启动 backend（同时托管 frontend/dist）
-4. 部署完成后访问服务域名
+5. 部署完成后访问服务域名
 
 健康检查：
 
