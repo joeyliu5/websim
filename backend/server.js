@@ -80,6 +80,54 @@ function cleanOptionalText(value) {
   return String(value);
 }
 
+function parseLimit(value, fallback, max) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.min(Math.floor(parsed), max);
+}
+
+function getAdminToken(req) {
+  const authHeader = String(req.headers.authorization || '');
+  if (authHeader.startsWith('Bearer ')) {
+    return authHeader.slice(7).trim();
+  }
+  return String(req.headers['x-admin-token'] || req.query.adminToken || '');
+}
+
+function requireAdminAuth(req, res, next) {
+  if (!process.env.ADMIN_TOKEN) {
+    return res.status(503).json({ ok: false, message: 'admin token not configured' });
+  }
+
+  if (getAdminToken(req) !== process.env.ADMIN_TOKEN) {
+    return res.status(401).json({ ok: false, message: 'unauthorized' });
+  }
+
+  return next();
+}
+
+function requireSupabaseStorage(req, res, next) {
+  if (!supabase) {
+    return res.status(503).json({ ok: false, message: 'supabase storage not configured' });
+  }
+  return next();
+}
+
+function csvCell(value) {
+  if (value === undefined || value === null) return '';
+  const stringValue =
+    typeof value === 'string' ? value : typeof value === 'object' ? JSON.stringify(value) : String(value);
+  return `"${stringValue.replace(/"/g, '""')}"`;
+}
+
+function toCsv(rows, headers) {
+  const head = headers.join(',');
+  const body = rows
+    .map((row) => headers.map((header) => csvCell(row[header])).join(','))
+    .join('\n');
+  return `${head}\n${body}\n`;
+}
+
 async function ensureLogFiles() {
   await fs.promises.mkdir(path.join(__dirname, 'logs'), { recursive: true });
   for (const file of [LOG_FILE, ACTION_LOG_FILE, COMMENT_LOG_FILE]) {
@@ -258,6 +306,68 @@ async function loadComments(targetId) {
   }));
 }
 
+async function fetchAdminSummary() {
+  const [
+    { count: eventCount, error: eventError },
+    { count: actionCount, error: actionError },
+    { count: commentCount, error: commentError },
+    { count: interactionCount, error: interactionError },
+  ] = await Promise.all([
+    supabase.from('event_logs').select('*', { count: 'exact', head: true }),
+    supabase.from('action_logs').select('*', { count: 'exact', head: true }),
+    supabase.from('comment_logs').select('*', { count: 'exact', head: true }),
+    supabase.from('interaction_logs').select('*', { count: 'exact', head: true }),
+  ]);
+
+  const firstError = eventError || actionError || commentError || interactionError;
+  if (firstError) throw firstError;
+
+  return {
+    eventCount: eventCount || 0,
+    actionCount: actionCount || 0,
+    commentCount: commentCount || 0,
+    interactionCount: interactionCount || 0,
+  };
+}
+
+async function fetchEventLogs(options) {
+  let query = supabase
+    .from('event_logs')
+    .select('id,participant_id,session_id,page_session_id,page,condition,seq,event_name,action,target_id,depth,dwell_ms,event_timestamp,received_at,payload')
+    .order('event_timestamp', { ascending: false })
+    .limit(options.limit);
+
+  if (options.participantId) query = query.eq('participant_id', options.participantId);
+  if (options.page) query = query.eq('page', options.page);
+  if (options.eventName) query = query.eq('event_name', options.eventName);
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return data || [];
+}
+
+async function fetchActionLogs(limit) {
+  const { data, error } = await supabase
+    .from('action_logs')
+    .select('id,participant_id,action_name,target_id,received_at,payload')
+    .order('received_at', { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+  return data || [];
+}
+
+async function fetchCommentLogs(limit) {
+  const { data, error } = await supabase
+    .from('comment_logs')
+    .select('id,target_id,content,nickname,participant_id,created_at,likes')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+  return data || [];
+}
+
 const DIST_DIR = resolveDistDir();
 
 app.use(express.json({ limit: '1mb' }));
@@ -353,6 +463,82 @@ app.get('/api/health', (_, res) => {
     ts: Date.now(),
     storage: supabase ? 'supabase' : 'jsonl',
   });
+});
+
+app.get('/api/admin/summary', requireAdminAuth, requireSupabaseStorage, async (req, res) => {
+  try {
+    const summary = await fetchAdminSummary();
+    return res.json({ ok: true, summary });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
+app.get('/api/admin/events', requireAdminAuth, requireSupabaseStorage, async (req, res) => {
+  try {
+    const rows = await fetchEventLogs({
+      limit: parseLimit(req.query.limit, 100, 1000),
+      participantId: cleanOptionalText(req.query.participantId),
+      page: cleanOptionalText(req.query.page),
+      eventName: cleanOptionalText(req.query.eventName),
+    });
+    return res.json({ ok: true, rows });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
+app.get('/api/admin/actions', requireAdminAuth, requireSupabaseStorage, async (req, res) => {
+  try {
+    const rows = await fetchActionLogs(parseLimit(req.query.limit, 100, 1000));
+    return res.json({ ok: true, rows });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
+app.get('/api/admin/comments', requireAdminAuth, requireSupabaseStorage, async (req, res) => {
+  try {
+    const rows = await fetchCommentLogs(parseLimit(req.query.limit, 100, 1000));
+    return res.json({ ok: true, rows });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: error.message });
+  }
+});
+
+app.get('/api/admin/export/events.csv', requireAdminAuth, requireSupabaseStorage, async (req, res) => {
+  try {
+    const rows = await fetchEventLogs({
+      limit: parseLimit(req.query.limit, 1000, 5000),
+      participantId: cleanOptionalText(req.query.participantId),
+      page: cleanOptionalText(req.query.page),
+      eventName: cleanOptionalText(req.query.eventName),
+    });
+
+    const csv = toCsv(rows, [
+      'id',
+      'participant_id',
+      'session_id',
+      'page_session_id',
+      'page',
+      'condition',
+      'seq',
+      'event_name',
+      'action',
+      'target_id',
+      'depth',
+      'dwell_ms',
+      'event_timestamp',
+      'received_at',
+      'payload',
+    ]);
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="event_logs.csv"');
+    return res.send(csv);
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: error.message });
+  }
 });
 
 if (DIST_DIR && fs.existsSync(DIST_DIR)) {
