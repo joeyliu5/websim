@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { useExperimentLogger } from '../hooks/useExperimentLogger';
 import type { UserProfile } from '../types/experiment';
 import './SaltCityExperimentPage.css';
@@ -9,7 +9,7 @@ type Citation = { mid: string; index: number; name: string };
 type AnswerBlock =
   | { kind: 'heading' | 'bullet' | 'paragraph'; text: string; citations: Citation[] }
   | { kind: 'media'; items: Array<{ mid: string; type: string; author: string; image: string }> };
-type Source = { index: number; mid: string; name: string; url: string; preview: string; createdAt: string };
+type Source = { index: number; mid: string; name: string; url: string };
 type Post = {
   id: string;
   bid: string;
@@ -33,8 +33,20 @@ type CaseBundle = {
   id: string;
   topic: string;
   posts: Post[];
-  smart: { answerRaw: string; blocks: AnswerBlock[]; weiboReferenceCount: number; sources: Source[]; suggestions: string[]; generatedAt?: number };
+  smart: { blocks: AnswerBlock[]; weiboReferenceCount: number; sources: Source[]; generatedAt?: number };
 };
+type CommentItem = { id: string; targetId: string; content: string; nickname: string; createdAt: number };
+type Panel = { kind: 'comment' | 'repost'; targetId: string; label: string };
+type ActionContextValue = {
+  likedIds: Set<string>;
+  repostedIds: Set<string>;
+  addedComments: Record<string, number>;
+  onLike: (targetId: string) => void;
+  onComment: (targetId: string, label: string) => void;
+  onRepost: (targetId: string, label: string) => void;
+};
+const ActionContext = createContext<ActionContextValue | null>(null);
+const AI_TARGET = 'saltcity_ai_202610';
 
 function localTime(raw: string) {
   const match = /\b(Oct)\s+(\d+)\s+(\d\d:\d\d)/.exec(raw);
@@ -49,17 +61,41 @@ function richText(text: string) {
   );
 }
 
-async function recordAction(action: string, participantId: string, condition: SaltCityCondition, targetId: string) {
+async function recordAction(action: string, participantId: string, condition: SaltCityCondition, targetId: string, detail: Record<string, unknown> = {}) {
   try {
-    await fetch('/api/actions', {
+    const response = await fetch('/api/actions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, participantId, condition, targetId, page: `saltcity_${condition}`, ts: Date.now() }),
+      body: JSON.stringify({ action, participantId, condition, targetId, page: `saltcity_${condition}`, ts: Date.now(), ...detail }),
       keepalive: true,
     });
+    return response.ok;
   } catch {
     // The experiment remains readable if logging is temporarily unavailable.
+    return false;
   }
+}
+
+function readSavedIds(key: string): Set<string> {
+  try {
+    const value = JSON.parse(localStorage.getItem(key) || '[]');
+    return new Set(Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []);
+  } catch { return new Set(); }
+}
+
+function ActionBar({ targetId, label, reposts = 0, comments = 0, likes = 0 }: {
+  targetId: string; label: string; reposts?: number; comments?: number; likes?: number;
+}) {
+  const actions = useContext(ActionContext);
+  if (!actions) return null;
+  const liked = actions.likedIds.has(targetId);
+  const reposted = actions.repostedIds.has(targetId);
+  const commentCount = comments + (actions.addedComments[targetId] || 0);
+  return <div className="salt-post-actions" aria-label={`${label}互动`}>
+    <button type="button" onClick={() => actions.onRepost(targetId, label)} data-track="open_repost" data-track-id={targetId}>↗ <span>{reposted ? '已转发' : '转发'}{reposts + (reposted ? 1 : 0) ? ` ${reposts + (reposted ? 1 : 0)}` : ''}</span></button>
+    <button type="button" onClick={() => actions.onComment(targetId, label)} data-track="open_comment" data-track-id={targetId}>▢ <span>评论{commentCount ? ` ${commentCount}` : ''}</span></button>
+    <button type="button" onClick={() => actions.onLike(targetId)} data-track="toggle_like" data-track-id={targetId} aria-pressed={liked} className={liked ? 'salt-action-active' : ''}>♡ <span>{liked ? '已赞' : '点赞'}{likes + (liked ? 1 : 0) ? ` ${likes + (liked ? 1 : 0)}` : ''}</span></button>
+  </div>;
 }
 
 function Header({ topic, condition }: { topic: string; condition: SaltCityCondition }) {
@@ -97,12 +133,10 @@ function PostMedia({ post, openImage }: { post: Post; openImage: (url: string) =
   );
 }
 
-function PostCard({ post, onOpen, onImage, condition, participantId }: {
+function PostCard({ post, onOpen, onImage }: {
   post: Post;
   onOpen: () => void;
   onImage: (url: string) => void;
-  condition: SaltCityCondition;
-  participantId: string;
 }) {
   return (
     <article className="salt-post" data-observe-id={`post_${post.id}`}>
@@ -116,11 +150,7 @@ function PostCard({ post, onOpen, onImage, condition, participantId }: {
       </div>
       <button type="button" className="salt-post-text" onClick={onOpen} data-track="open_post_detail" data-track-id={post.id}>{post.text}</button>
       <PostMedia post={post} openImage={onImage} />
-      <div className="salt-post-actions">
-        <button type="button" onClick={() => void recordAction('click_repost', participantId, condition, post.id)} data-track="click_repost" data-track-id={post.id}>↗ <span>{post.reposts}</span></button>
-        <button type="button" onClick={() => void recordAction('click_comment', participantId, condition, post.id)} data-track="click_comment" data-track-id={post.id}>▢ <span>{post.comments}</span></button>
-        <button type="button" onClick={() => void recordAction('click_like', participantId, condition, post.id)} data-track="click_like" data-track-id={post.id}>♡ <span>{post.likes}</span></button>
-      </div>
+      <ActionBar targetId={post.id} label={`${post.author}的微博`} reposts={post.reposts} comments={post.comments} likes={post.likes} />
     </article>
   );
 }
@@ -137,7 +167,7 @@ function DetailOverlay({ post, onClose, onImage, condition, participantId }: {
     <div className="salt-overlay" role="dialog" aria-modal="true" aria-label={`${post.author}的微博正文`}>
       <div className="salt-detail">
         <div className="salt-detail-header"><button type="button" onClick={onClose} data-track="close_post_detail">←</button><strong>微博正文</strong><a href={post.url} target="_blank" rel="noopener noreferrer" onClick={() => void recordAction('open_original_weibo', participantId, condition, post.id)}>原微博 ↗</a></div>
-        <PostCard post={post} onOpen={() => undefined} onImage={onImage} condition={condition} participantId={participantId} />
+        <PostCard post={post} onOpen={() => undefined} onImage={onImage} />
       </div>
     </div>
   );
@@ -147,9 +177,7 @@ function SmartContent({ bundle, onSource }: {
   bundle: CaseBundle;
   onSource: (mid: string, fallback?: string) => void;
 }) {
-  const sourcesByMid = useMemo(() => new Map(bundle.smart.sources.filter((item) => item.mid).map((item) => [item.mid, item])), [bundle.smart.sources]);
-  const weiboSources = bundle.smart.sources.filter((item) => item.mid);
-  const externalSources = bundle.smart.sources.filter((item) => !item.mid);
+  const sourcesByMid = useMemo(() => new Map(bundle.smart.sources.map((item) => [item.mid, item])), [bundle.smart.sources]);
   return (
     <article className="salt-ai">
       <div className="salt-ai-query">{bundle.topic}</div>
@@ -158,9 +186,11 @@ function SmartContent({ bundle, onSource }: {
       <div className="salt-ai-answer">
         {bundle.smart.blocks.map((block, index) => {
           if (block.kind === 'media') {
-            return <div className="salt-ai-media" key={`block_${index}`}>{block.items.map((item, i) => <button type="button" key={`${item.mid}_${i}`} onClick={() => onSource(item.mid)} data-track="open_ai_media_source" data-track-id={item.mid}><img src={item.image} alt={`${item.author}来源媒体`} /><span>{item.type === 'v' ? '▶' : '▣'} {item.author}</span></button>)}</div>;
+            const items = block.items.filter((item) => sourcesByMid.has(item.mid));
+            return items.length ? <div className="salt-ai-media" key={`block_${index}`}>{items.map((item, i) => <button type="button" key={`${item.mid}_${i}`} onClick={() => onSource(item.mid)} data-track="open_ai_media_source" data-track-id={item.mid}><img src={item.image} alt={`${item.author}来源媒体`} /><span>{item.type === 'v' ? '▶' : '▣'} {item.author}</span></button>)}</div> : null;
           }
-          const content = <>{richText(block.text)}{block.citations.length > 0 && <span className="salt-citations">{block.citations.map((cite, i) => {
+          const citations = block.citations.filter((cite) => sourcesByMid.has(cite.mid));
+          const content = <>{richText(block.text)}{citations.length > 0 && <span className="salt-citations">{citations.map((cite, i) => {
             const source = sourcesByMid.get(cite.mid);
             return <button key={`${cite.mid}_${i}`} type="button" onClick={() => onSource(cite.mid, source?.url)} data-track="open_ai_citation" data-track-id={cite.mid}>@{cite.name || source?.name || '微博原文'} <sup>{cite.index || source?.index}</sup></button>;
           })}</span>}</>;
@@ -169,14 +199,36 @@ function SmartContent({ bundle, onSource }: {
           return <p key={`block_${index}`}>{content}</p>;
         })}
       </div>
-      <div className="salt-ai-trace"><strong>信源追溯</strong><span>参考{bundle.smart.weiboReferenceCount}篇博文</span><small>媒体17%　金橙V75%　认证用户4%　普通用户4%</small><small>内容由AI生成</small></div>
-      <section className="salt-source-section" aria-label="智搜引用微博">
-        <h2>参考博文 <span>共{bundle.smart.weiboReferenceCount}篇</span></h2>
-        {weiboSources.map((source) => <button className="salt-source-card" key={source.index} type="button" onClick={() => onSource(source.mid, source.url)} data-track="open_ai_reference" data-track-id={source.mid}><span className="salt-source-meta"><strong>{source.name}</strong><small>结果{source.index}　{localTime(source.createdAt)}</small></span><span className="salt-source-preview">{source.preview || '查看微博原文'}</span><span className="salt-source-open">查看原文 ›</span></button>)}
-        {externalSources.length > 0 && <details className="salt-external-sources"><summary>其他参考链接（{externalSources.length}）</summary>{externalSources.map((source) => <a key={source.index} href={source.url} target="_blank" rel="noopener noreferrer" data-track="open_ai_external_source" data-track-id={String(source.index)}>参考来源 {source.index} ↗</a>)}</details>}
-      </section>
+      <div className="salt-ai-trace"><small>内容由AI生成</small></div>
+      <ActionBar targetId={AI_TARGET} label="微博智搜回答" />
     </article>
   );
+}
+
+function InteractionPanel({ panel, draft, onDraft, onClose, onSubmit, comments, loading, sending, error }: {
+  panel: Panel;
+  draft: string;
+  onDraft: (value: string) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+  comments: CommentItem[];
+  loading: boolean;
+  sending: boolean;
+  error: string;
+}) {
+  return <div className="salt-interaction-backdrop" role="dialog" aria-modal="true" aria-label={`${panel.kind === 'comment' ? '评论' : '转发'}${panel.label}`}>
+    <section className="salt-interaction-panel">
+      <header><button type="button" onClick={onClose} aria-label="关闭">×</button><strong>{panel.kind === 'comment' ? '评论' : '转发微博'}</strong><span>{panel.label}</span></header>
+      {panel.kind === 'comment' && <div className="salt-comment-list">
+        {loading ? <p>正在加载评论…</p> : comments.length ? comments.map((comment) => <div className="salt-comment" key={comment.id}><strong>{comment.nickname}</strong><p>{comment.content}</p></div>) : <p>还没有实验评论</p>}
+      </div>}
+      <div className="salt-interaction-compose">
+        <textarea value={draft} onChange={(event) => onDraft(event.target.value)} maxLength={500} placeholder={panel.kind === 'comment' ? '写下你的评论…' : '说说你转发这条内容的想法…'} data-track={panel.kind === 'comment' ? 'comment_input' : 'repost_input'} />
+        {error && <p className="salt-interaction-error">{error}</p>}
+        <div><small>{draft.length}/500</small><button type="button" disabled={!draft.trim() || sending} onClick={onSubmit} data-track={panel.kind === 'comment' ? 'submit_comment' : 'submit_repost'} data-track-id={panel.targetId}>{sending ? '提交中…' : panel.kind === 'comment' ? '发布评论' : '转发'}</button></div>
+      </div>
+    </section>
+  </div>;
 }
 
 function SaltCityContent({ participantId, userProfile, condition }: { participantId: string; userProfile: UserProfile; condition: SaltCityCondition }) {
@@ -184,6 +236,17 @@ function SaltCityContent({ participantId, userProfile, condition }: { participan
   const [error, setError] = useState('');
   const [detail, setDetail] = useState<Post | null>(null);
   const [image, setImage] = useState('');
+  const likesKey = `weibsim_saltcity_likes_${participantId}`;
+  const repostsKey = `weibsim_saltcity_reposts_${participantId}`;
+  const [likedIds, setLikedIds] = useState(() => readSavedIds(likesKey));
+  const [repostedIds, setRepostedIds] = useState(() => readSavedIds(repostsKey));
+  const [addedComments, setAddedComments] = useState<Record<string, number>>({});
+  const [panel, setPanel] = useState<Panel | null>(null);
+  const [draft, setDraft] = useState('');
+  const [comments, setComments] = useState<CommentItem[]>([]);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [panelError, setPanelError] = useState('');
   useExperimentLogger({ pageId: detail ? 'saltcity_post_detail' : `saltcity_${condition}`, condition: `saltcity_${condition}`, participantId, userProfile });
 
   useEffect(() => {
@@ -206,6 +269,64 @@ function SaltCityContent({ participantId, userProfile, condition }: { participan
     window.addEventListener('popstate', syncDetailFromUrl);
     return () => window.removeEventListener('popstate', syncDetailFromUrl);
   }, [bundle]);
+
+  useEffect(() => {
+    if (!panel || panel.kind !== 'comment') return;
+    const targetId = panel.targetId;
+    setCommentsLoading(true);
+    void fetch(`/api/comments?targetId=${encodeURIComponent(targetId)}`)
+      .then((response) => response.json() as Promise<{ comments?: CommentItem[] }>)
+      .then((data) => setComments(Array.isArray(data.comments) ? data.comments : []))
+      .catch(() => setComments([]))
+      .finally(() => setCommentsLoading(false));
+  }, [panel]);
+
+  const toggleLike = (targetId: string) => {
+    const next = new Set(likedIds);
+    const action = next.has(targetId) ? 'unlike' : 'like';
+    if (next.has(targetId)) next.delete(targetId); else next.add(targetId);
+    setLikedIds(next);
+    localStorage.setItem(likesKey, JSON.stringify([...next]));
+    void recordAction(action, participantId, condition, targetId);
+  };
+  const openPanel = (kind: Panel['kind'], targetId: string, label: string) => {
+    setPanel({ kind, targetId, label });
+    setDraft('');
+    setPanelError('');
+    setComments([]);
+    void recordAction(`open_${kind}`, participantId, condition, targetId);
+  };
+  const submitPanel = async () => {
+    if (!panel || !draft.trim() || sending) return;
+    setSending(true);
+    setPanelError('');
+    const text = draft.trim();
+    try {
+      if (panel.kind === 'comment') {
+        const response = await fetch('/api/comments', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targetId: panel.targetId, content: text, nickname: `实验用户${participantId.slice(-4)}`, participantId }),
+        });
+        if (!response.ok) throw new Error('评论保存失败，请重试');
+        const result = await response.json() as { comment?: CommentItem };
+        if (!result.comment) throw new Error('评论保存失败，请重试');
+        setComments((current) => [...current, result.comment!]);
+        setAddedComments((current) => ({ ...current, [panel.targetId]: (current[panel.targetId] || 0) + 1 }));
+        setDraft('');
+        void recordAction('submit_comment', participantId, condition, panel.targetId);
+      } else {
+        const saved = await recordAction('submit_repost', participantId, condition, panel.targetId, { content: text });
+        if (!saved) throw new Error('转发记录保存失败，请重试');
+        const next = new Set(repostedIds);
+        next.add(panel.targetId);
+        setRepostedIds(next);
+        localStorage.setItem(repostsKey, JSON.stringify([...next]));
+        setPanel(null);
+      }
+    } catch (cause) {
+      setPanelError(cause instanceof Error ? cause.message : '提交失败，请重试');
+    } finally { setSending(false); }
+  };
 
   const openPost = (post: Post) => {
     const url = new URL(window.location.href);
@@ -232,18 +353,21 @@ function SaltCityContent({ participantId, userProfile, condition }: { participan
   if (error) return <main className="salt-status">{error}</main>;
   if (!bundle) return <main className="salt-status">正在加载实验素材…</main>;
   return (
+    <ActionContext.Provider value={{ likedIds, repostedIds, addedComments, onLike: toggleLike, onComment: (targetId, label) => openPanel('comment', targetId, label), onRepost: (targetId, label) => openPanel('repost', targetId, label) }}>
     <main className="salt-page">
       <Header topic={bundle.topic} condition={condition} />
       <div className="salt-main">
         <div className="salt-content">
           {condition === 'ordinary'
-            ? <section aria-label="普通微博新闻">{bundle.posts.map((post) => <PostCard key={post.id} post={post} onOpen={() => openPost(post)} onImage={setImage} condition={condition} participantId={participantId} />)}</section>
+            ? <section aria-label="普通微博新闻">{bundle.posts.map((post) => <PostCard key={post.id} post={post} onOpen={() => openPost(post)} onImage={setImage} />)}</section>
             : <SmartContent bundle={bundle} onSource={openSource} />}
         </div>
       </div>
       {detail && <DetailOverlay post={detail} onClose={closePost} onImage={setImage} condition={condition} participantId={participantId} />}
       {image && <div className="salt-image-viewer" role="dialog" aria-modal="true" onClick={() => setImage('')}><button type="button" aria-label="关闭图片">×</button><img src={image} alt="微博图片大图" /></div>}
+      {panel && <InteractionPanel panel={panel} draft={draft} onDraft={setDraft} onClose={() => setPanel(null)} onSubmit={() => void submitPanel()} comments={comments} loading={commentsLoading} sending={sending} error={panelError} />}
     </main>
+    </ActionContext.Provider>
   );
 }
 

@@ -40,8 +40,9 @@ def mid_from_link(link: str) -> str:
     return match.group(1) if match else ""
 
 
-def parse_ai_blocks(raw: str):
+def parse_ai_blocks(raw: str, allowed_mids: list[str]):
     replacements = []
+    source_number = {mid: index for index, mid in enumerate(allowed_mids, start=1)}
 
     def replace(match):
         value = json.loads(match.group(1))
@@ -63,12 +64,13 @@ def parse_ai_blocks(raw: str):
             if value.get("type") == "quoted":
                 for item in (value.get("data") or {}).get("quote_list") or []:
                     mid = mid_from_link(item.get("scheme") or "")
-                    index = item.get("index")
-                    if mid and not any(x["mid"] == mid for x in cites):
-                        cites.append({"mid": mid, "index": index, "name": item.get("name") or "微博原文"})
+                    if mid in source_number and not any(x["mid"] == mid for x in cites):
+                        cites.append({"mid": mid, "index": source_number[mid], "name": item.get("name") or "微博原文"})
             elif value.get("type") == "mediablock":
                 for item in value.get("data") or []:
                     mid = item.get("cur_mid") or ""
+                    if mid not in source_number:
+                        continue
                     media.append({
                         "mid": mid,
                         "type": item.get("type"),
@@ -127,29 +129,10 @@ def main():
             "likes": status.get("attitudes_count") or 0,
         })
 
-    linked = read_json(ARCHIVE / "智搜" / "引用微博" / "linked_posts.json")
-    linked_by_mid = {str(x.get("post_id")): x for x in linked}
-    original_by_mid = {row["id"]: row for row in post_rows}
-    source_links = []
-    seen = set()
-    weibo_index = 0
-    for link in ai.get("link_list") or []:
-        if link in seen:
-            continue
-        seen.add(link)
-        mid = mid_from_link(link)
-        row = linked_by_mid.get(mid) or {}
-        original = original_by_mid.get(mid) or {}
-        if mid:
-            weibo_index += 1
-        source_links.append({
-            "index": weibo_index if mid else len(source_links) + 1,
-            "mid": mid,
-            "name": row.get("author_name") or ("外部来源" if not mid else "微博原文"),
-            "url": original.get("url") or row.get("post_url") or (f"https://weibo.com/detail/{mid}" if mid else link),
-            "preview": re.sub(r"\s*展开c\s*$", "", row.get("content_text") or "").strip(),
-            "createdAt": row.get("created_at") or (original.get("createdAt") or ""),
-        })
+    source_links = [
+        {"index": index, "mid": post["id"], "name": post["author"], "url": post["url"]}
+        for index, post in enumerate(post_rows, start=1)
+    ]
 
     bundle = {
         "id": "saltcity_202610",
@@ -157,12 +140,10 @@ def main():
         "sourceCaptureDate": "2026-11-07",
         "posts": post_rows,
         "smart": {
-            "answerRaw": raw_answer,
-            "blocks": parse_ai_blocks(raw_answer),
+            "blocks": parse_ai_blocks(raw_answer, [post["id"] for post in post_rows]),
             "generatedAt": ai.get("analysis_time"),
-            "weiboReferenceCount": 24,
+            "weiboReferenceCount": 3,
             "sources": source_links,
-            "suggestions": ["宿管与校方追责仍待公开", "防欺凌大会难挡宿舍求助失灵", "头部受击不能只看有没有外伤"],
         },
     }
     DATA.parent.mkdir(parents=True, exist_ok=True)

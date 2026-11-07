@@ -33,6 +33,7 @@
 .salt-post-actions{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid #f0f0f0}
 .salt-post-actions button{padding:10px 4px;border:0;background:none;color:#888;font-size:17px;cursor:pointer}
 .salt-post-actions button span{font-size:12px;margin-left:5px}
+.salt-post-actions button.salt-action-active{color:#f57a18;font-weight:600}
 .salt-ai{padding:22px 26px 40px}
 .salt-ai-query{font-size:24px;line-height:1.35;font-weight:600;margin-bottom:21px}
 .salt-ai-answer-title{display:flex;align-items:center;gap:8px;color:#333;font-size:16px}
@@ -54,16 +55,24 @@
 .salt-ai-trace{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:25px 0;padding:13px 0;border-top:1px solid #eee;border-bottom:1px solid #eee;color:#777;font-size:13px}
 .salt-ai-trace strong{color:#333}
 .salt-ai-trace small{font-size:12px}
-.salt-source-section h2{display:flex;justify-content:space-between;align-items:center;margin:0 0 8px;font-size:17px}
-.salt-source-section h2 span{font-size:12px;font-weight:400;color:#999}
-.salt-source-card{display:block;width:100%;padding:12px 0;border:0;border-bottom:1px solid #eee;background:#fff;text-align:left;cursor:pointer}
-.salt-source-meta{display:flex;justify-content:space-between;gap:12px;align-items:center;color:#333;font-size:14px}
-.salt-source-meta small{color:#999;font-size:12px;white-space:nowrap}
-.salt-source-preview{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;margin-top:7px;color:#666;font-size:13px;line-height:1.6}
-.salt-source-open{display:block;margin-top:5px;color:#6680aa;font-size:12px;text-align:right}
-.salt-external-sources{padding-top:14px;color:#777;font-size:13px}
-.salt-external-sources summary{cursor:pointer}
-.salt-external-sources a{display:block;padding:8px 0;color:#6384b8;text-decoration:none;border-bottom:1px solid #eee}
+.salt-interaction-backdrop{position:fixed;inset:0;z-index:90;display:flex;justify-content:center;align-items:flex-end;background:#0009}
+.salt-interaction-panel{display:flex;flex-direction:column;width:min(100%,620px);max-height:min(82vh,720px);min-height:340px;background:#fff;border-radius:14px 14px 0 0;box-shadow:0 -5px 25px #0002}
+.salt-interaction-panel header{display:flex;align-items:center;gap:12px;min-height:54px;padding:0 16px;border-bottom:1px solid #eee}
+.salt-interaction-panel header button{border:0;background:none;color:#666;font-size:28px;cursor:pointer}
+.salt-interaction-panel header strong{font-size:17px;white-space:nowrap}
+.salt-interaction-panel header span{overflow:hidden;color:#999;font-size:13px;text-overflow:ellipsis;white-space:nowrap}
+.salt-comment-list{flex:1;min-height:70px;overflow-y:auto;padding:12px 18px}
+.salt-comment-list>p{color:#999;font-size:13px;text-align:center}
+.salt-comment{padding:11px 0;border-bottom:1px solid #eee}
+.salt-comment strong{font-size:13px;color:#5b76a0}
+.salt-comment p{margin:5px 0 0;white-space:pre-wrap;font-size:14px;line-height:1.6}
+.salt-interaction-compose{padding:13px 16px 16px;border-top:1px solid #eee}
+.salt-interaction-compose textarea{width:100%;min-height:95px;resize:vertical;padding:10px;border:1px solid #dedede;border-radius:8px;font:inherit;font-size:15px;outline-color:#ff9b47}
+.salt-interaction-compose>div{display:flex;justify-content:space-between;align-items:center;margin-top:8px}
+.salt-interaction-compose small{color:#999}
+.salt-interaction-compose button{padding:8px 18px;border:0;border-radius:18px;background:#ff8200;color:#fff;font-size:14px;cursor:pointer}
+.salt-interaction-compose button:disabled{background:#ddd;cursor:default}
+.salt-interaction-error{margin:5px 0;color:#d93636;font-size:12px}
 .salt-overlay{position:fixed;inset:0;z-index:50;background:#0009;overflow:auto}
 .salt-detail{width:min(100%,720px);min-height:100vh;margin:0 auto;background:#fff;box-shadow:0 0 24px #0003}
 .salt-detail-header{position:sticky;top:0;z-index:2;display:flex;justify-content:space-between;align-items:center;height:52px;padding:0 18px;border-bottom:1px solid #eee;background:#fff}
