@@ -2,6 +2,16 @@
 
 微博移动端仿真实验应用（话题抓取 -> 页面生成 -> 行为日志采集）。
 
+## 当前实验素材：盐城寄宿学校事件
+
+首页现使用 2026-11-07 固定采集的“13岁男孩被打后多次求助宿管遭拒”素材。参与者填写基本信息后，系统按参与者编号随机分配至普通微博组或智搜组，并在本机保持分组稳定。普通组展示大河报、中国新闻周刊、新浪新闻三条完整原帖及头像、图片或视频；智搜组展示当次采集的完整回答、引用缩略图和来源列表。智搜引用的三条实验原帖可在站内打开详情，其余引用链接跳转至微博原文或相应外部来源。实验界面没有跨组切换入口。
+
+本地开发时可用 `?preview=ordinary` 或 `?preview=smart` 查看两组；生产构建不接受预览参数。固定素材位于 `frontend/public/data/saltcity_case.json` 和 `frontend/public/case-saltcity/`。如需从原始采集目录重新生成：
+
+```bash
+python3 scripts/build_saltcity_case.py --archive '/Users/liujinzhuo/Documents/ChatGPT/微博实验/原始采集/盐城寄宿学校事件'
+```
+
 ## 项目复盘文档
 
 - 详见 [PROJECT_RECAP.md](./PROJECT_RECAP.md)

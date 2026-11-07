@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { LoginPage } from './pages/LoginPage';
 import { AdminPage } from './pages/AdminPage';
-import { SearchResultPage } from './pages/SearchResultPage';
+import { SaltCityExperimentPage, type SaltCityCondition } from './pages/SaltCityExperimentPage';
 import type { UserProfile } from './types/experiment';
 
 const PARTICIPANT_KEY = 'weibsim_participant_id';
@@ -19,12 +19,25 @@ function getParticipantId() {
   return next;
 }
 
+function assignedCondition(participantId: string): SaltCityCondition {
+  // A preview override exists only in the local development server.
+  if (import.meta.env.DEV) {
+    const preview = new URLSearchParams(window.location.search).get('preview');
+    if (preview === 'ordinary' || preview === 'smart') return preview;
+  }
+  const key = `weibsim_saltcity_condition_${participantId}`;
+  const cached = localStorage.getItem(key);
+  if (cached === 'ordinary' || cached === 'smart') return cached;
+  const sample = new Uint32Array(1);
+  crypto.getRandomValues(sample);
+  const next: SaltCityCondition = sample[0] % 2 === 0 ? 'ordinary' : 'smart';
+  localStorage.setItem(key, next);
+  return next;
+}
+
 function ExperimentApp() {
   const [participantId] = useState(() => getParticipantId());
-  const keyword = useMemo(() => {
-    const k = new URLSearchParams(window.location.search).get('keyword');
-    return k || '#晚5秒要付1700高速费当事人发声#';
-  }, []);
+  const [condition] = useState(() => assignedCondition(participantId));
 
   // Always require fresh login info for each new page-open/refresh.
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -40,13 +53,7 @@ function ExperimentApp() {
     );
   }
 
-  return (
-    <SearchResultPage
-      participantId={participantId}
-      userProfile={profile}
-      forcedKeyword={keyword}
-    />
-  );
+  return <SaltCityExperimentPage participantId={participantId} userProfile={profile} condition={condition} />;
 }
 
 export default function App() {

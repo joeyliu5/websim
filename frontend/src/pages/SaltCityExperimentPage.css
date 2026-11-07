@@ -1,0 +1,76 @@
+.salt-page{min-height:100vh;background:#f4f4f4;color:#252525;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}
+.salt-header{position:sticky;top:0;z-index:20;background:#fff;box-shadow:0 1px 4px #00000010}
+.salt-header-inner{height:60px;max-width:1100px;margin:auto;display:flex;align-items:center;gap:28px;padding:0 20px}
+.salt-brand{font-size:27px;font-weight:800;font-style:italic;letter-spacing:-1.5px;color:#f65e2b;white-space:nowrap}
+.salt-brand-dot{display:inline-block;margin-left:2px;font-size:15px;vertical-align:top;color:#f7ac20}
+.salt-search{display:flex;align-items:center;gap:8px;min-width:0;max-width:660px;flex:1;height:36px;padding:0 13px;border:1px solid #e8e8e8;border-radius:4px;background:#f7f7f7;color:#666;font-size:14px}
+.salt-search span:last-child{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.salt-magnifier{font-size:25px;line-height:1;color:#888}
+.salt-header-icons{font-size:19px;color:#666;white-space:nowrap}
+.salt-nav{height:44px;max-width:1100px;margin:auto;padding:0 20px;display:flex;align-items:stretch;gap:40px;border-top:1px solid #f5f5f5}
+.salt-nav-selected{display:flex;align-items:center;border-bottom:3px solid #ff8200;color:#222;font-size:16px;font-weight:600}
+.salt-main{max-width:1100px;margin:18px auto;display:flex;padding:0 20px}
+.salt-content{width:min(100%,720px);background:#fff;border:1px solid #ececec}
+.salt-post{padding:18px 20px 0;border-bottom:9px solid #f5f5f5;background:#fff}
+.salt-post:last-child{border-bottom:0}
+.salt-post-author{display:flex;gap:10px;align-items:center}
+.salt-post-author>img{width:48px;height:48px;border-radius:50%;object-fit:cover;flex:none}
+.salt-post-identity{min-width:0;flex:1}
+.salt-post-identity>div{display:flex;align-items:center;gap:5px}
+.salt-author-name{color:#222;font-size:15px;font-weight:600}
+.salt-verified{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:#eeb128;color:#fff;font-size:9px;font-weight:700}
+.salt-post-identity p{margin:4px 0 0;color:#939393;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.salt-more{border:0;background:transparent;color:#9a9a9a;font-size:22px;cursor:pointer}
+.salt-post-text{display:block;width:100%;padding:10px 0 12px;text-align:left;white-space:pre-wrap;overflow-wrap:anywhere;background:none;border:0;color:#242424;font-size:15px;line-height:1.7;cursor:pointer}
+.salt-photos{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;max-width:500px;padding-bottom:14px}
+.salt-photos-single{grid-template-columns:minmax(0,1fr);max-width:350px}
+.salt-photos button{padding:0;border:0;background:#eee;cursor:zoom-in;aspect-ratio:1}
+.salt-photos-single button{aspect-ratio:auto}
+.salt-photos img{display:block;width:100%;height:100%;object-fit:cover}
+.salt-photos-single img{height:auto;max-height:450px;object-fit:contain}
+.salt-video-wrap{max-width:380px;padding-bottom:14px}
+.salt-video-wrap video{display:block;width:100%;max-height:500px;background:#111;border-radius:3px}
+.salt-post-actions{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid #f0f0f0}
+.salt-post-actions button{padding:10px 4px;border:0;background:none;color:#888;font-size:17px;cursor:pointer}
+.salt-post-actions button span{font-size:12px;margin-left:5px}
+.salt-ai{padding:22px 26px 40px}
+.salt-ai-query{font-size:24px;line-height:1.35;font-weight:600;margin-bottom:21px}
+.salt-ai-answer-title{display:flex;align-items:center;gap:8px;color:#333;font-size:16px}
+.salt-ai-symbol{color:#ff8200;font-size:22px}
+.salt-ai-thinking{margin-left:8px;padding:3px 9px;border:1px solid #f5c792;border-radius:12px;color:#b77119;font-size:12px}
+.salt-ai-generated{margin-top:8px;color:#999;font-size:12px}
+.salt-ai-answer{margin-top:20px;font-size:15px;line-height:1.9;color:#303030}
+.salt-ai-answer p{margin:0 0 12px}
+.salt-ai-answer h2{margin:25px 0 13px;font-size:19px;line-height:1.45}
+.salt-ai-bullet{padding-left:1.2em;text-indent:-1.2em}
+.salt-citations{display:inline-flex;flex-wrap:wrap;gap:4px;margin-left:5px;vertical-align:middle;text-indent:0}
+.salt-citations button{border:0;border-radius:12px;padding:2px 7px;background:#f1f3f5;color:#777;font-size:11px;line-height:1.6;cursor:pointer}
+.salt-citations button:hover,.salt-source-card:hover{color:#e97500}
+.salt-citations sup{margin-left:2px;color:#a4a4a4}
+.salt-ai-media{display:flex;gap:6px;margin:8px 0 17px;max-width:430px}
+.salt-ai-media button{position:relative;flex:1;min-width:0;padding:0;border:0;background:#ececec;cursor:pointer;aspect-ratio:1.25}
+.salt-ai-media img{display:block;width:100%;height:100%;object-fit:cover}
+.salt-ai-media span{position:absolute;left:6px;bottom:6px;padding:2px 5px;background:#0009;color:#fff;font-size:11px}
+.salt-ai-trace{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:25px 0;padding:13px 0;border-top:1px solid #eee;border-bottom:1px solid #eee;color:#777;font-size:13px}
+.salt-ai-trace strong{color:#333}
+.salt-ai-trace small{font-size:12px}
+.salt-source-section h2{display:flex;justify-content:space-between;align-items:center;margin:0 0 8px;font-size:17px}
+.salt-source-section h2 span{font-size:12px;font-weight:400;color:#999}
+.salt-source-card{display:block;width:100%;padding:12px 0;border:0;border-bottom:1px solid #eee;background:#fff;text-align:left;cursor:pointer}
+.salt-source-meta{display:flex;justify-content:space-between;gap:12px;align-items:center;color:#333;font-size:14px}
+.salt-source-meta small{color:#999;font-size:12px;white-space:nowrap}
+.salt-source-preview{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;margin-top:7px;color:#666;font-size:13px;line-height:1.6}
+.salt-source-open{display:block;margin-top:5px;color:#6680aa;font-size:12px;text-align:right}
+.salt-external-sources{padding-top:14px;color:#777;font-size:13px}
+.salt-external-sources summary{cursor:pointer}
+.salt-external-sources a{display:block;padding:8px 0;color:#6384b8;text-decoration:none;border-bottom:1px solid #eee}
+.salt-overlay{position:fixed;inset:0;z-index:50;background:#0009;overflow:auto}
+.salt-detail{width:min(100%,720px);min-height:100vh;margin:0 auto;background:#fff;box-shadow:0 0 24px #0003}
+.salt-detail-header{position:sticky;top:0;z-index:2;display:flex;justify-content:space-between;align-items:center;height:52px;padding:0 18px;border-bottom:1px solid #eee;background:#fff}
+.salt-detail-header button{border:0;background:none;font-size:24px;cursor:pointer}
+.salt-detail-header a{color:#607ba7;font-size:13px;text-decoration:none}
+.salt-image-viewer{position:fixed;inset:0;z-index:70;display:flex;align-items:center;justify-content:center;background:#000e;cursor:zoom-out}
+.salt-image-viewer button{position:absolute;right:20px;top:10px;background:none;border:0;color:#fff;font-size:38px;cursor:pointer}
+.salt-image-viewer img{max-width:95vw;max-height:92vh;object-fit:contain}
+.salt-status{padding:50px;text-align:center;color:#777}
+@media(max-width:700px){.salt-header-inner{height:52px;gap:12px;padding:0 12px}.salt-brand{font-size:21px}.salt-header-icons{display:none}.salt-search{font-size:13px}.salt-nav{height:39px;padding:0 15px}.salt-main{margin:0;padding:0}.salt-content{width:100%;border:0}.salt-post{padding:13px 14px 0}.salt-post-author>img{width:42px;height:42px}.salt-ai{padding:17px 16px 40px}.salt-ai-query{font-size:21px}.salt-ai-answer{font-size:15px}.salt-photos{max-width:100%}}
