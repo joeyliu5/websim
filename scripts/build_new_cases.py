@@ -89,7 +89,8 @@ def build(case_id: str, spec: dict) -> None:
             'text': html.unescape((longtext.get('data') or {}).get('longTextContent') or status.get('text_raw') or ''),
             'photos': [photo for photo in photos if photo],
             'video': copy_asset(media / 'video.mp4', asset_dir / f'{mid}_video.mp4'),
-            'videoPoster': '',
+            'videoPoster': f'/case-{case_id}/{mid}_video_poster.jpg'
+                if (asset_dir / f'{mid}_video_poster.jpg').is_file() else '',
             'reposts': status.get('reposts_count') or 0,
             'comments': status.get('comments_count') or 0,
             'likes': status.get('attitudes_count') or 0,
@@ -99,13 +100,16 @@ def build(case_id: str, spec: dict) -> None:
         blocks.append({'kind': kind, 'text': text, 'citations': [
             {'mid': posts[i - 1]['id'], 'index': i, 'name': posts[i - 1]['author']} for i in numbers
         ]})
+    media_items = []
     for post in posts:
         media = archive / '智搜' / 'media' / f"{post['id']}.jpg"
-        if media.is_file():
-            blocks.insert(1, {'kind': 'media', 'items': [{
+        if media.is_file() and len(media_items) < 2:
+            media_items.append({
                 'mid': post['id'], 'type': 'p', 'author': post['author'],
                 'image': copy_asset(media, asset_dir / f"{post['id']}_ai.jpg"),
-            }]})
+            })
+    if media_items:
+        blocks.insert(1, {'kind': 'media', 'items': media_items})
     ai_response = json.loads((archive / '智搜' / 'api_loop_01.json').read_text())
     bundle = {
         'id': f'{case_id}_202611', 'topic': spec['topic'], 'sourceCaptureDate': '2026-11-08',

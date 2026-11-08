@@ -82,21 +82,16 @@
         "kind": "media",
         "items": [
           {
-            "mid": "5361892963126505",
-            "type": "p",
-            "author": "极目新闻",
-            "image": "/case-teachers/5361892963126505_ai.jpg"
-          }
-        ]
-      },
-      {
-        "kind": "media",
-        "items": [
-          {
             "mid": "5361872939254848",
             "type": "p",
             "author": "潇湘晨报",
             "image": "/case-teachers/5361872939254848_ai.jpg"
+          },
+          {
+            "mid": "5361892963126505",
+            "type": "p",
+            "author": "极目新闻",
+            "image": "/case-teachers/5361892963126505_ai.jpg"
           }
         ]
       },
