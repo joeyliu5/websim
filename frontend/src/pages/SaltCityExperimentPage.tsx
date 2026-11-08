@@ -46,11 +46,12 @@ type ActionContextValue = {
   onRepost: (targetId: string, label: string) => void;
 };
 const ActionContext = createContext<ActionContextValue | null>(null);
-const AI_TARGET = 'saltcity_ai_202610';
+type CaseId = 'saltcity' | 'starbucks' | 'teachers';
 
 function localTime(raw: string) {
-  const match = /\b(Oct)\s+(\d+)\s+(\d\d:\d\d)/.exec(raw);
-  return match ? `10月${Number(match[2])}日 ${match[3]}` : raw;
+  const match = /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d+)\s+(\d\d:\d\d)/.exec(raw);
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return match ? `${months.indexOf(match[1]) + 1}月${Number(match[2])}日 ${match[3]}` : raw;
 }
 
 function richText(text: string) {
@@ -61,12 +62,12 @@ function richText(text: string) {
   );
 }
 
-async function recordAction(action: string, participantId: string, condition: SaltCityCondition, targetId: string, detail: Record<string, unknown> = {}) {
+async function recordAction(action: string, participantId: string, caseId: CaseId, condition: SaltCityCondition, targetId: string, detail: Record<string, unknown> = {}) {
   try {
     const response = await fetch('/api/actions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, participantId, condition, targetId, page: `saltcity_${condition}`, ts: Date.now(), ...detail }),
+      body: JSON.stringify({ action, participantId, condition: `${caseId}_${condition}`, targetId, page: `${caseId}_${condition}`, ts: Date.now(), ...detail }),
       keepalive: true,
     });
     return response.ok;
@@ -155,8 +156,8 @@ function PostCard({ post, onOpen, onImage }: {
   );
 }
 
-function DetailOverlay({ post, onClose, onImage, condition, participantId }: {
-  post: Post; onClose: () => void; onImage: (url: string) => void; condition: SaltCityCondition; participantId: string;
+function DetailOverlay({ post, onClose, onImage, caseId, condition, participantId }: {
+  post: Post; onClose: () => void; onImage: (url: string) => void; caseId: CaseId; condition: SaltCityCondition; participantId: string;
 }) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
@@ -166,7 +167,7 @@ function DetailOverlay({ post, onClose, onImage, condition, participantId }: {
   return (
     <div className="salt-overlay" role="dialog" aria-modal="true" aria-label={`${post.author}的微博正文`}>
       <div className="salt-detail">
-        <div className="salt-detail-header"><button type="button" onClick={onClose} data-track="close_post_detail">←</button><strong>微博正文</strong><a href={post.url} target="_blank" rel="noopener noreferrer" onClick={() => void recordAction('open_original_weibo', participantId, condition, post.id)}>原微博 ↗</a></div>
+        <div className="salt-detail-header"><button type="button" onClick={onClose} data-track="close_post_detail">←</button><strong>微博正文</strong><a href={post.url} target="_blank" rel="noopener noreferrer" onClick={() => void recordAction('open_original_weibo', participantId, caseId, condition, post.id)}>原微博 ↗</a></div>
         <PostCard post={post} onOpen={() => undefined} onImage={onImage} />
       </div>
     </div>
@@ -200,7 +201,7 @@ function SmartContent({ bundle, onSource }: {
         })}
       </div>
       <div className="salt-ai-trace"><small>内容由AI生成</small></div>
-      <ActionBar targetId={AI_TARGET} label="微博智搜回答" />
+      <ActionBar targetId={`${bundle.id}_ai`} label="微博智搜回答" />
     </article>
   );
 }
@@ -231,13 +232,13 @@ function InteractionPanel({ panel, draft, onDraft, onClose, onSubmit, comments, 
   </div>;
 }
 
-function SaltCityContent({ participantId, userProfile, condition }: { participantId: string; userProfile: UserProfile; condition: SaltCityCondition }) {
+function SaltCityContent({ participantId, userProfile, condition, caseId }: { participantId: string; userProfile: UserProfile; condition: SaltCityCondition; caseId: CaseId }) {
   const [bundle, setBundle] = useState<CaseBundle | null>(null);
   const [error, setError] = useState('');
   const [detail, setDetail] = useState<Post | null>(null);
   const [image, setImage] = useState('');
-  const likesKey = `weibsim_saltcity_likes_${participantId}`;
-  const repostsKey = `weibsim_saltcity_reposts_${participantId}`;
+  const likesKey = `weibsim_${caseId}_likes_${participantId}`;
+  const repostsKey = `weibsim_${caseId}_reposts_${participantId}`;
   const [likedIds, setLikedIds] = useState(() => readSavedIds(likesKey));
   const [repostedIds, setRepostedIds] = useState(() => readSavedIds(repostsKey));
   const [addedComments, setAddedComments] = useState<Record<string, number>>({});
@@ -247,15 +248,15 @@ function SaltCityContent({ participantId, userProfile, condition }: { participan
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [panelError, setPanelError] = useState('');
-  useExperimentLogger({ pageId: detail ? 'saltcity_post_detail' : `saltcity_${condition}`, condition: `saltcity_${condition}`, participantId, userProfile });
+  useExperimentLogger({ pageId: detail ? `${caseId}_post_detail` : `${caseId}_${condition}`, condition: `${caseId}_${condition}`, participantId, userProfile });
 
   useEffect(() => {
-    void fetch('/data/saltcity_case.json').then((response) => {
+    void fetch(`/data/${caseId}_case.json`).then((response) => {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       return response.json() as Promise<CaseBundle>;
     }).then((data) => setBundle(data)).catch(() => setError('实验素材加载失败，请刷新页面。'));
-    void recordAction('assigned_condition', participantId, condition, 'saltcity_202610');
-  }, [participantId, condition]);
+    void recordAction('assigned_condition', participantId, caseId, condition, caseId);
+  }, [participantId, caseId, condition]);
 
   useEffect(() => { document.title = '微博搜索 - 微博'; }, []);
 
@@ -287,14 +288,14 @@ function SaltCityContent({ participantId, userProfile, condition }: { participan
     if (next.has(targetId)) next.delete(targetId); else next.add(targetId);
     setLikedIds(next);
     localStorage.setItem(likesKey, JSON.stringify([...next]));
-    void recordAction(action, participantId, condition, targetId);
+    void recordAction(action, participantId, caseId, condition, targetId);
   };
   const openPanel = (kind: Panel['kind'], targetId: string, label: string) => {
     setPanel({ kind, targetId, label });
     setDraft('');
     setPanelError('');
     setComments([]);
-    void recordAction(`open_${kind}`, participantId, condition, targetId);
+    void recordAction(`open_${kind}`, participantId, caseId, condition, targetId);
   };
   const submitPanel = async () => {
     if (!panel || !draft.trim() || sending) return;
@@ -313,9 +314,9 @@ function SaltCityContent({ participantId, userProfile, condition }: { participan
         setComments((current) => [...current, result.comment!]);
         setAddedComments((current) => ({ ...current, [panel.targetId]: (current[panel.targetId] || 0) + 1 }));
         setDraft('');
-        void recordAction('submit_comment', participantId, condition, panel.targetId);
+        void recordAction('submit_comment', participantId, caseId, condition, panel.targetId);
       } else {
-        const saved = await recordAction('submit_repost', participantId, condition, panel.targetId, { content: text });
+        const saved = await recordAction('submit_repost', participantId, caseId, condition, panel.targetId, { content: text });
         if (!saved) throw new Error('转发记录保存失败，请重试');
         const next = new Set(repostedIds);
         next.add(panel.targetId);
@@ -333,7 +334,7 @@ function SaltCityContent({ participantId, userProfile, condition }: { participan
     url.searchParams.set('post', post.bid);
     window.history.pushState({ postId: post.id }, '', url);
     setDetail(post);
-    void recordAction('open_post_detail', participantId, condition, post.id);
+    void recordAction('open_post_detail', participantId, caseId, condition, post.id);
   };
   const closePost = () => {
     const url = new URL(window.location.href);
@@ -343,7 +344,7 @@ function SaltCityContent({ participantId, userProfile, condition }: { participan
   };
   const openSource = (mid: string, fallback?: string) => {
     if (!bundle) return;
-    void recordAction('open_ai_source', participantId, condition, mid);
+    void recordAction('open_ai_source', participantId, caseId, condition, mid);
     const post = bundle.posts.find((item) => item.id === mid);
     if (post) { openPost(post); return; }
     const url = fallback || bundle.smart.sources.find((item) => item.mid === mid)?.url;
@@ -363,7 +364,7 @@ function SaltCityContent({ participantId, userProfile, condition }: { participan
             : <SmartContent bundle={bundle} onSource={openSource} />}
         </div>
       </div>
-      {detail && <DetailOverlay post={detail} onClose={closePost} onImage={setImage} condition={condition} participantId={participantId} />}
+      {detail && <DetailOverlay post={detail} onClose={closePost} onImage={setImage} caseId={caseId} condition={condition} participantId={participantId} />}
       {image && <div className="salt-image-viewer" role="dialog" aria-modal="true" onClick={() => setImage('')}><button type="button" aria-label="关闭图片">×</button><img src={image} alt="微博图片大图" /></div>}
       {panel && <InteractionPanel panel={panel} draft={draft} onDraft={setDraft} onClose={() => setPanel(null)} onSubmit={() => void submitPanel()} comments={comments} loading={commentsLoading} sending={sending} error={panelError} />}
     </main>
@@ -371,6 +372,6 @@ function SaltCityContent({ participantId, userProfile, condition }: { participan
   );
 }
 
-export function SaltCityExperimentPage(props: { participantId: string; userProfile: UserProfile; condition: SaltCityCondition }) {
+export function SaltCityExperimentPage(props: { participantId: string; userProfile: UserProfile; condition: SaltCityCondition; caseId: CaseId }) {
   return <SaltCityContent {...props} />;
 }

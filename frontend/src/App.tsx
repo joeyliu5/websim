@@ -19,25 +19,38 @@ function getParticipantId() {
   return next;
 }
 
-function assignedCondition(participantId: string): SaltCityCondition {
+type CaseId = 'saltcity' | 'starbucks' | 'teachers';
+type Assignment = { caseId: CaseId; condition: SaltCityCondition };
+const CASES: CaseId[] = ['saltcity', 'starbucks', 'teachers'];
+
+function assignedCondition(participantId: string): Assignment {
   // A preview override exists only in the local development server.
   if (import.meta.env.DEV) {
-    const preview = new URLSearchParams(window.location.search).get('preview');
-    if (preview === 'ordinary' || preview === 'smart') return preview;
+    const params = new URLSearchParams(window.location.search);
+    const preview = params.get('preview');
+    const caseId = params.get('case') || 'saltcity';
+    if ((preview === 'ordinary' || preview === 'smart') && CASES.includes(caseId as CaseId)) {
+      return { caseId: caseId as CaseId, condition: preview };
+    }
   }
-  const key = `weibsim_saltcity_condition_${participantId}`;
+  const key = `weibsim_case_assignment_${participantId}`;
   const cached = localStorage.getItem(key);
-  if (cached === 'ordinary' || cached === 'smart') return cached;
+  if (cached) {
+    try {
+      const saved = JSON.parse(cached) as Assignment;
+      if (CASES.includes(saved.caseId) && (saved.condition === 'ordinary' || saved.condition === 'smart')) return saved;
+    } catch { /* Resample an invalid saved assignment. */ }
+  }
   const sample = new Uint32Array(1);
   crypto.getRandomValues(sample);
-  const next: SaltCityCondition = sample[0] % 2 === 0 ? 'ordinary' : 'smart';
-  localStorage.setItem(key, next);
+  const next: Assignment = { caseId: CASES[Math.floor(sample[0] / 2) % CASES.length], condition: sample[0] % 2 === 0 ? 'ordinary' : 'smart' };
+  localStorage.setItem(key, JSON.stringify(next));
   return next;
 }
 
 function ExperimentApp() {
   const [participantId] = useState(() => getParticipantId());
-  const [condition] = useState(() => assignedCondition(participantId));
+  const [assignment] = useState(() => assignedCondition(participantId));
 
   // Always require fresh login info for each new page-open/refresh.
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -53,7 +66,7 @@ function ExperimentApp() {
     );
   }
 
-  return <SaltCityExperimentPage participantId={participantId} userProfile={profile} condition={condition} />;
+  return <SaltCityExperimentPage participantId={participantId} userProfile={profile} condition={assignment.condition} caseId={assignment.caseId} />;
 }
 
 export default function App() {
